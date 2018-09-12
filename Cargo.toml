@@ -1,0 +1,48 @@
+[package]
+name = "n5-wasm"
+version = "0.1.0"
+authors = ["Andrew Champion <andrew.champion@gmail.com>"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default-features = ["console_error_panic_hook"]
+
+[dependencies]
+cfg-if = "0.1.2"
+futures = "0.1.20"
+js-sys = "0.2.6"
+serde_json = "1.0"
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.2.21"
+
+
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.1", optional = true }
+
+[dependencies.n5]
+version = "0.2.1"
+default-features = false
+features = ["use_ndarray"]
+# features = ["bzip", "gzip", "lz", "xz"]
+
+[dependencies.web-sys]
+version = "0.1"
+features = [
+  'Headers',
+  'Request',
+  'RequestInit',
+  'RequestMode',
+  'Response',
+  'Window',
+]
+
+[patch.crates-io]
+n5 = { path = "../n5" }
+js-sys = { git =  'https://github.com/rustwasm/wasm-bindgen' }
+web-sys = { git = 'https://github.com/rustwasm/wasm-bindgen' }
+wasm-bindgen = { git = 'https://github.com/rustwasm/wasm-bindgen' }
