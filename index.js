@@ -13,10 +13,19 @@ js
       reader.exists("volume")
         .then(exists => {
           console.log("volume:" + exists);
-       }),
+        }),
       reader.exists("foobar")
         .then(exists => {
           console.log("foobar:" + exists);
-       })
+        }),
+      reader.get_dataset_attributes("volume")
+        .then(data_attrs => {
+          console.log("volume attributes:" + data_attrs);
+          return reader.read_block("volume", data_attrs, [0, 0, 0].map(BigInt));
+        })
+        .then(block => {
+          console.log("block:" + (block == null));
+          console.log(block);
+        })
     ])
 	});

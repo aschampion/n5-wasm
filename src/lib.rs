@@ -9,10 +9,10 @@ extern crate web_sys;
 
 mod utils;
 
+use std::fmt::Write;
 use std::io::{
     Error,
     ErrorKind,
-    Result,
 };
 use std::str::FromStr;
 
@@ -38,6 +38,8 @@ pub trait N5PromiseReader {
 
     fn exists(&self, path_name: &str) -> Promise;
 
+    fn get_dataset_attributes(&self, path_name: &str) -> Promise;
+
     fn read_block(
         &self,
         path_name: &str,
@@ -61,6 +63,13 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
         future_to_promise(map_future_error_wasm(to_return))
     }
 
+    fn get_dataset_attributes(&self, path_name: &str) -> Promise {
+        let to_return = self.get_dataset_attributes(path_name)
+            .map(JsValue::from);
+
+        future_to_promise(map_future_error_wasm(to_return))
+    }
+
     fn read_block(
         &self,
         path_name: &str,
@@ -71,7 +80,7 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
             DataType::UINT8 => {
                 self.read_block::<u8>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| {
-                        JsValue::from(maybe_block.map(|block| VecDataBlockUINT8(block)))
+                        JsValue::from(maybe_block.map(VecDataBlockUINT8))
                     })
             }
             _ => unimplemented!()
@@ -105,6 +114,9 @@ pub trait N5AsyncReader {
 
     fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>>;
 
+    fn get_dataset_attributes(&self, path_name: &str) ->
+        Box<Future<Item = MyDatasetAttributes, Error = Error>>;
+
     fn read_block<T>(
         &self,
         path_name: &str,
@@ -112,7 +124,8 @@ pub trait N5AsyncReader {
         grid_position: Vec<i64>
     ) -> Box<Future<Item = Option<VecDataBlock<T>>, Error = Error>>
             where DataType: n5::DataBlockCreator<T>,
-                  VecDataBlock<T>: DataBlock<T> ;
+                  VecDataBlock<T>: DataBlock<T>,
+                  T: 'static;
 }
 
 #[wasm_bindgen]
@@ -139,7 +152,7 @@ impl N5HTTPFetch {
     fn fetch_json(&self, path_name: &str) -> Box<Future<Item = JsValue, Error = JsValue>> {
         let to_return = self.fetch(path_name).and_then(|resp_value| {
             assert!(resp_value.is_instance_of::<Response>());
-            let resp: Response = resp_value.dyn_into().unwrap();
+            let resp: Response = resp_value.dyn_into()?;
 
             resp.json()
         }).and_then(|json_value: Promise| {
@@ -150,7 +163,11 @@ impl N5HTTPFetch {
     }
 
     fn get_attributes(&self, path_name: &str) -> Box<Future<Item = serde_json::Value, Error = Error>> {
-        Box::new(map_future_error_rust(self.fetch_json(&format!("{}/{}", path_name, ATTRIBUTES_FILE)).map(|json| json.into_serde().unwrap())))
+        let to_return = self
+            .fetch_json(&format!("{}/{}", path_name, ATTRIBUTES_FILE))
+            .map(|json| json.into_serde().unwrap());
+
+        Box::new(map_future_error_rust(to_return))
     }
 }
 
@@ -183,6 +200,19 @@ impl N5HTTPFetch {
 
     pub fn exists(&self, path_name: &str) -> Promise {
         N5PromiseReader::exists(self, path_name)
+    }
+
+    pub fn get_dataset_attributes(&self, path_name: &str) -> Promise {
+        N5PromiseReader::get_dataset_attributes(self, path_name)
+    }
+
+    pub fn read_block(
+        &self,
+        path_name: &str,
+        data_attrs: &MyDatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Promise {
+        N5PromiseReader::read_block(self, path_name, data_attrs, grid_position)
     }
 }
 
@@ -227,6 +257,21 @@ impl N5AsyncReader for N5HTTPFetch {
         Box::new(map_future_error_rust(to_return))
     }
 
+    fn get_dataset_attributes(&self, path_name: &str) ->
+            Box<Future<Item = MyDatasetAttributes, Error = Error>> {
+
+        let to_return = self
+            .fetch_json(&format!("{}/{}", path_name, ATTRIBUTES_FILE))
+            .map(|json| {
+                let da = json.into_serde();
+
+                if let Err(ref x) = da {Window::alert_with_message(&x.to_string());}
+
+                MyDatasetAttributes(da.unwrap())});
+
+        Box::new(map_future_error_rust(to_return))
+    }
+
     fn read_block<T>(
         &self,
         path_name: &str,
@@ -234,27 +279,43 @@ impl N5AsyncReader for N5HTTPFetch {
         grid_position: Vec<i64>
     ) -> Box<Future<Item = Option<VecDataBlock<T>>, Error = Error>>
             where DataType: n5::DataBlockCreator<T>,
-                  VecDataBlock<T>: DataBlock<T> {
-        unimplemented!();
+                  VecDataBlock<T>: DataBlock<T>,
+                  T: 'static {
 
-        let to_return = self.fetch(path_name).and_then(|resp_value| {
+        let da2 = data_attrs.clone();
+
+        let mut block_path = String::new();
+        for coord in &grid_position {
+            write!(block_path, "/{}", coord);
+        }
+        // let block_path = format!("{}/{}", path_name,
+        //     grid_position.iter().map(ToString::to_string).collect::<String>().join("/"));
+
+        let f = self.fetch(&format!("{}{}", path_name, block_path)).and_then(|resp_value| {
             assert!(resp_value.is_instance_of::<Response>());
             let resp: Response = resp_value.dyn_into().unwrap();
 
-            JsFuture::from(resp.array_buffer().unwrap())
-        }).map(|arrbuff_value| {
-            assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
-            // let arrbuff: ArrayBuffer = arrbuff_value.dyn_into().unwrap();
-            let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
+            if resp.ok() {
+                let to_return = JsFuture::from(resp.array_buffer().unwrap())
+                    .map(move |arrbuff_value| {
+                        assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
+                        let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
 
-            // Some(<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
-            //     &typebuff,
-            //     data_attrs,
-            //     grid_position).unwrap())
+                        let mut buff: Vec<u8> = Vec::with_capacity(typebuff.length() as usize);
 
-            // let handle = js_sys::Uint8Array::new(arrbuff);
+                        typebuff.for_each(&mut |byte, _, _| buff.push(byte));
+
+                        Some(<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
+                            &buff,
+                            &da2,
+                            grid_position).unwrap())
+                    });
+                future::Either::A(to_return)
+            } else  {
+                future::Either::B(future::ok(None))
+            }
         });
 
-        // Box::new(map_future_error_rust(to_return))
+        Box::new(map_future_error_rust(f))
     }
 }

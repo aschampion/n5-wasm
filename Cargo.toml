@@ -27,8 +27,8 @@ console_error_panic_hook = { version = "0.1.1", optional = true }
 [dependencies.n5]
 version = "0.2.1"
 default-features = false
+# gzip is not yet compatible with web assembly. Blocked on flate2-rs#165.
 features = ["use_ndarray"]
-# features = ["bzip", "gzip", "lz", "xz"]
 
 [dependencies.web-sys]
 version = "0.1"
