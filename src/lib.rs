@@ -36,9 +36,9 @@ pub trait N5PromiseReader {
     /// Get the N5 specification version of the container.
     fn get_version(&self) -> Promise;
 
-    fn exists(&self, path_name: &str) -> Promise;
-
     fn get_dataset_attributes(&self, path_name: &str) -> Promise;
+
+    fn exists(&self, path_name: &str) -> Promise;
 
     fn read_block(
         &self,
@@ -56,15 +56,15 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
         future_to_promise(map_future_error_wasm(to_return))
     }
 
-    fn exists(&self, path_name: &str) -> Promise {
-        let to_return = self.exists(path_name)
+    fn get_dataset_attributes(&self, path_name: &str) -> Promise {
+        let to_return = self.get_dataset_attributes(path_name)
             .map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
-    fn get_dataset_attributes(&self, path_name: &str) -> Promise {
-        let to_return = self.get_dataset_attributes(path_name)
+    fn exists(&self, path_name: &str) -> Promise {
+        let to_return = self.exists(path_name)
             .map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
@@ -112,10 +112,10 @@ pub struct VecDataBlockUINT8(VecDataBlock<u8>);
 pub trait N5AsyncReader {
     fn get_version(&self) -> Box<Future<Item = MyVersion, Error = Error>>;
 
-    fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>>;
-
     fn get_dataset_attributes(&self, path_name: &str) ->
         Box<Future<Item = MyDatasetAttributes, Error = Error>>;
+
+    fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>>;
 
     fn read_block<T>(
         &self,
@@ -126,6 +126,10 @@ pub trait N5AsyncReader {
             where DataType: n5::DataBlockCreator<T>,
                   VecDataBlock<T>: DataBlock<T>,
                   T: 'static;
+
+    fn list(&self, path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>>;
+
+    fn list_attributes(&self, path_name: &str) -> Box<Future<Item = serde_json::Value, Error = Error>>;
 }
 
 #[wasm_bindgen]
@@ -144,7 +148,7 @@ impl N5HTTPFetch {
             &format!("{}/{}", &self.base_path, path_name),
             &request_options).unwrap();
 
-        let req_promise = Window::fetch_with_request(&req);
+        let req_promise = web_sys::window().unwrap().fetch_with_request(&req);
 
         JsFuture::from(req_promise)
     }
@@ -198,12 +202,12 @@ impl N5HTTPFetch {
         N5PromiseReader::get_version(self)
     }
 
-    pub fn exists(&self, path_name: &str) -> Promise {
-        N5PromiseReader::exists(self, path_name)
-    }
-
     pub fn get_dataset_attributes(&self, path_name: &str) -> Promise {
         N5PromiseReader::get_dataset_attributes(self, path_name)
+    }
+
+    pub fn exists(&self, path_name: &str) -> Promise {
+        N5PromiseReader::exists(self, path_name)
     }
 
     pub fn read_block(
@@ -246,17 +250,6 @@ impl N5AsyncReader for N5HTTPFetch {
         Box::new(to_return)
     }
 
-    fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>> {
-        let to_return = self.fetch(path_name).and_then(|resp_value| {
-            assert!(resp_value.is_instance_of::<Response>());
-            let resp: Response = resp_value.dyn_into().unwrap();
-
-            future::ok(resp.ok())
-        });
-
-        Box::new(map_future_error_rust(to_return))
-    }
-
     fn get_dataset_attributes(&self, path_name: &str) ->
             Box<Future<Item = MyDatasetAttributes, Error = Error>> {
 
@@ -265,9 +258,22 @@ impl N5AsyncReader for N5HTTPFetch {
             .map(|json| {
                 let da = json.into_serde();
 
-                if let Err(ref x) = da {Window::alert_with_message(&x.to_string());}
+                if let Err(ref x) = da {
+                    web_sys::window().unwrap().alert_with_message(&x.to_string());
+                }
 
                 MyDatasetAttributes(da.unwrap())});
+
+        Box::new(map_future_error_rust(to_return))
+    }
+
+    fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>> {
+        let to_return = self.fetch(path_name).and_then(|resp_value| {
+            assert!(resp_value.is_instance_of::<Response>());
+            let resp: Response = resp_value.dyn_into().unwrap();
+
+            future::ok(resp.ok())
+        });
 
         Box::new(map_future_error_rust(to_return))
     }
@@ -288,8 +294,6 @@ impl N5AsyncReader for N5HTTPFetch {
         for coord in &grid_position {
             write!(block_path, "/{}", coord);
         }
-        // let block_path = format!("{}/{}", path_name,
-        //     grid_position.iter().map(ToString::to_string).collect::<String>().join("/"));
 
         let f = self.fetch(&format!("{}{}", path_name, block_path)).and_then(|resp_value| {
             assert!(resp_value.is_instance_of::<Response>());
@@ -317,5 +321,13 @@ impl N5AsyncReader for N5HTTPFetch {
         });
 
         Box::new(map_future_error_rust(f))
+    }
+
+    fn list(&self, path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>> {
+        unimplemented!()
+    }
+
+    fn list_attributes(&self, path_name: &str) -> Box<Future<Item = serde_json::Value, Error = Error>> {
+        unimplemented!()
     }
 }

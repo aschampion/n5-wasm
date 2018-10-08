@@ -12,10 +12,10 @@ default-features = ["console_error_panic_hook"]
 [dependencies]
 cfg-if = "0.1.2"
 futures = "0.1.20"
-js-sys = "0.2.6"
+js-sys = "0.3.1"
 serde_json = "1.0"
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
-wasm-bindgen-futures = "0.2.21"
+wasm-bindgen-futures = "0.3.1"
 
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
@@ -25,13 +25,13 @@ wasm-bindgen-futures = "0.2.21"
 console_error_panic_hook = { version = "0.1.1", optional = true }
 
 [dependencies.n5]
-version = "0.2.1"
+version = "0.2.2"
 default-features = false
 # gzip is not yet compatible with web assembly. Blocked on flate2-rs#165.
 features = ["use_ndarray"]
 
 [dependencies.web-sys]
-version = "0.1"
+version = "0.3.1"
 features = [
   'Headers',
   'Request',
