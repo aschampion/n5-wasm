@@ -23,8 +23,16 @@ use js_sys::{
 use futures::{future, Future};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::{JsFuture, future_to_promise};
-use web_sys::{Request, RequestInit, RequestMode, Response, Window};
+use wasm_bindgen_futures::{
+    JsFuture,
+    future_to_promise,
+};
+use web_sys::{
+    Request,
+    RequestInit,
+    RequestMode,
+    Response,
+};
 
 use n5::prelude::*;
 
@@ -43,9 +51,11 @@ pub trait N5PromiseReader {
     fn read_block(
         &self,
         path_name: &str,
-        data_attrs: &MyDatasetAttributes,
+        data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Promise;
+
+    fn list_attributes(&self, path_name: &str) -> Promise;
 }
 
 impl<T> N5PromiseReader for T where T: N5AsyncReader {
@@ -73,47 +83,67 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
     fn read_block(
         &self,
         path_name: &str,
-        data_attrs: &MyDatasetAttributes,
+        data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Promise {
-        let to_return = match data_attrs.0.get_data_type() {
-            DataType::UINT8 => {
+        match data_attrs.0.get_data_type() {
+            // TODO: presumably can be rid of these monomorphization kludges
+            // when GATs land.
+            DataType::UINT8 => future_to_promise(map_future_error_wasm(
                 self.read_block::<u8>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| {
-                        JsValue::from(maybe_block.map(VecDataBlockUINT8))
-                    })
-            }
-            _ => unimplemented!()
-        };
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT8))))),
+            DataType::UINT16 => future_to_promise(map_future_error_wasm(
+                self.read_block::<u16>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT16))))),
+            DataType::UINT32 => future_to_promise(map_future_error_wasm(
+                self.read_block::<u32>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT32))))),
+            DataType::UINT64 => future_to_promise(map_future_error_wasm(
+                self.read_block::<u64>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT64))))),
+            DataType::INT8 => future_to_promise(map_future_error_wasm(
+                self.read_block::<i8>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT8))))),
+            DataType::INT16 => future_to_promise(map_future_error_wasm(
+                self.read_block::<i16>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT16))))),
+            DataType::INT32 => future_to_promise(map_future_error_wasm(
+                self.read_block::<i32>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT32))))),
+            DataType::INT64 => future_to_promise(map_future_error_wasm(
+                self.read_block::<i64>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT64))))),
+            DataType::FLOAT32 => future_to_promise(map_future_error_wasm(
+                self.read_block::<f32>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT32))))),
+            DataType::FLOAT64 => future_to_promise(map_future_error_wasm(
+                self.read_block::<f64>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT64))))),
+        }
+    }
+
+    fn list_attributes(
+        &self,
+        path_name: &str,
+    ) -> Promise {
+
+        // TODO: Superfluous conversion from JSON to JsValue to serde to JsValue.
+        let to_return = self.list_attributes(path_name)
+            .map(|v| JsValue::from_serde(&v).unwrap());
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 }
 
-#[wasm_bindgen]
-pub struct MyVersion(n5::Version);
 
-#[wasm_bindgen]
-impl MyVersion {
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-#[wasm_bindgen]
-pub struct MyDatasetAttributes(DatasetAttributes);
-
-#[wasm_bindgen]
-pub struct VecDataBlockUINT8(VecDataBlock<u8>);
-
-// This trait exists to preserve type information between calls (rather than
-// erasing it with `Promise`) and for easier potential future compatibility
-// with an N5 core async trait.
+/// This trait exists to preserve type information between calls (rather than
+/// erasing it with `Promise`) and for easier potential future compatibility
+/// with an N5 core async trait.
 pub trait N5AsyncReader {
-    fn get_version(&self) -> Box<Future<Item = MyVersion, Error = Error>>;
+    fn get_version(&self) -> Box<Future<Item = wrapped::Version, Error = Error>>;
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-        Box<Future<Item = MyDatasetAttributes, Error = Error>>;
+        Box<Future<Item = wrapped::DatasetAttributes, Error = Error>>;
 
     fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>>;
 
@@ -213,20 +243,26 @@ impl N5HTTPFetch {
     pub fn read_block(
         &self,
         path_name: &str,
-        data_attrs: &MyDatasetAttributes,
+        data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Promise {
         N5PromiseReader::read_block(self, path_name, data_attrs, grid_position)
     }
+
+    pub fn list_attributes(&self, path_name: &str) -> Promise {
+        N5PromiseReader::list_attributes(self, path_name)
+    }
 }
 
-fn map_future_error_rust<F: Future<Item = T, Error = JsValue>, T>(future: F) -> impl Future<Item = T, Error = Error> {
+fn map_future_error_rust<F: Future<Item = T, Error = JsValue>, T>(future: F)
+        -> impl Future<Item = T, Error = Error> {
     future.map_err(convert_jsvalue_error)
 }
 
-fn map_future_error_wasm<F: Future<Item = T, Error = Error>, T>(future: F) -> impl Future<Item = T, Error = JsValue> {
+fn map_future_error_wasm<F: Future<Item = T, Error = Error>, T>(future: F)
+        -> impl Future<Item = T, Error = JsValue> {
     future.map_err(|error| {
-        let js_error = js_sys::Error::new(&format!("uh oh! {:?}", error));
+        let js_error = js_sys::Error::new(&format!("{:?}", error));
         JsValue::from(js_error)
     })
 }
@@ -235,12 +271,11 @@ fn convert_jsvalue_error(error: JsValue) -> Error {
     Error::new(std::io::ErrorKind::Other, format!("{:?}", error))
 }
 
-// fn array_buffer_to_vec<T>(buff: ArrayBuffer) -> Vec<T>
 
 impl N5AsyncReader for N5HTTPFetch {
-    fn get_version(&self) -> Box<Future<Item = MyVersion, Error = Error>> {
+    fn get_version(&self) -> Box<Future<Item = wrapped::Version, Error = Error>> {
         let to_return = self.get_attributes("").map(|attr| {
-            MyVersion(n5::Version::from_str(attr
+            wrapped::Version(n5::Version::from_str(attr
                     .get(n5::VERSION_ATTRIBUTE_KEY)
                     .unwrap()
                     .as_str().unwrap_or("")
@@ -251,18 +286,14 @@ impl N5AsyncReader for N5HTTPFetch {
     }
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-            Box<Future<Item = MyDatasetAttributes, Error = Error>> {
+            Box<Future<Item = wrapped::DatasetAttributes, Error = Error>> {
 
         let to_return = self
             .fetch_json(&format!("{}/{}", path_name, ATTRIBUTES_FILE))
             .map(|json| {
                 let da = json.into_serde();
 
-                if let Err(ref x) = da {
-                    web_sys::window().unwrap().alert_with_message(&x.to_string());
-                }
-
-                MyDatasetAttributes(da.unwrap())});
+                wrapped::DatasetAttributes(da.unwrap())});
 
         Box::new(map_future_error_rust(to_return))
     }
@@ -305,8 +336,9 @@ impl N5AsyncReader for N5HTTPFetch {
                         assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
                         let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
 
+                        // TODO: tedious buffer copy.
+                        // See: https://github.com/rustwasm/wasm-bindgen/issues/811
                         let mut buff: Vec<u8> = Vec::with_capacity(typebuff.length() as usize);
-
                         typebuff.for_each(&mut |byte, _, _| buff.push(byte));
 
                         Some(<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
@@ -323,11 +355,100 @@ impl N5AsyncReader for N5HTTPFetch {
         Box::new(map_future_error_rust(f))
     }
 
-    fn list(&self, path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>> {
+    fn list(&self, _path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>> {
+        // TODO: Not implemented because remote paths are not listable.
         unimplemented!()
     }
 
-    fn list_attributes(&self, path_name: &str) -> Box<Future<Item = serde_json::Value, Error = Error>> {
-        unimplemented!()
+    fn list_attributes(
+        &self,
+        path_name: &str,
+    ) -> Box<Future<Item = serde_json::Value, Error = Error>> {
+
+        self.get_attributes(path_name)
     }
 }
+
+
+pub mod wrapped {
+    use super::*;
+
+    #[wasm_bindgen]
+    pub struct Version(pub(crate) n5::Version);
+
+    #[wasm_bindgen]
+    impl Version {
+        pub fn to_string(&self) -> String {
+            self.0.to_string()
+        }
+    }
+
+    #[wasm_bindgen]
+    pub struct DatasetAttributes(pub(crate) n5::DatasetAttributes);
+
+    #[wasm_bindgen]
+    impl DatasetAttributes {
+        pub fn get_dimensions(&self) -> Vec<i64> {
+            self.0.get_dimensions().to_owned()
+        }
+
+        pub fn get_block_size(&self) -> Vec<i32> {
+            self.0.get_block_size().to_owned()
+        }
+
+        // TODO: get_data_type
+
+        // TODO: get_compression
+
+        pub fn get_ndim(&self) -> usize {
+            self.0.get_ndim()
+        }
+
+        /// Get the total number of elements possible given the dimensions.
+        pub fn get_num_elements(&self) -> usize {
+            self.0.get_num_elements()
+        }
+
+        /// Get the total number of elements possible in a block.
+        pub fn get_block_num_elements(&self) -> usize {
+            self.0.get_block_num_elements()
+        }
+    }
+}
+
+macro_rules! data_block_monomorphizer {
+    ($d_name:ident, $d_type:ty) => {
+        #[wasm_bindgen]
+        pub struct $d_name(VecDataBlock<$d_type>);
+
+        #[wasm_bindgen]
+        impl $d_name {
+            pub fn get_size(&self) -> Vec<i32> {
+                self.0.get_size().to_owned()
+            }
+
+            pub fn get_grid_position(&self) -> Vec<i64> {
+                self.0.get_grid_position().to_owned()
+            }
+
+            pub fn get_data(&self) -> Vec<$d_type> {
+                self.0.get_data().to_owned()
+            }
+
+            pub fn get_num_elements(&self) -> i32 {
+                self.0.get_num_elements()
+            }
+        }
+    }
+}
+
+data_block_monomorphizer!(VecDataBlockUINT8,  u8);
+data_block_monomorphizer!(VecDataBlockUINT16, u16);
+data_block_monomorphizer!(VecDataBlockUINT32, u32);
+data_block_monomorphizer!(VecDataBlockUINT64, u64);
+data_block_monomorphizer!(VecDataBlockINT8,  i8);
+data_block_monomorphizer!(VecDataBlockINT16, i16);
+data_block_monomorphizer!(VecDataBlockINT32, i32);
+data_block_monomorphizer!(VecDataBlockINT64, i64);
+data_block_monomorphizer!(VecDataBlockFLOAT32, f32);
+data_block_monomorphizer!(VecDataBlockFLOAT64, f64);
