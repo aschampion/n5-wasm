@@ -1,6 +1,7 @@
 extern crate cfg_if;
 extern crate futures;
 extern crate js_sys;
+extern crate lru_cache;
 extern crate n5;
 extern crate serde_json;
 extern crate wasm_bindgen;
@@ -34,6 +35,7 @@ use web_sys::{
 use n5::prelude::*;
 
 
+pub mod async_cache;
 pub mod http_fetch;
 
 
@@ -169,7 +171,7 @@ pub trait N5AsyncReader {
     ) -> Box<Future<Item = Option<VecDataBlock<T>>, Error = Error>>
             where DataType: n5::DataBlockCreator<T>,
                   VecDataBlock<T>: DataBlock<T>,
-                  T: 'static;
+                  T: 'static + Clone;
 
     fn list(&self, path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>>;
 
