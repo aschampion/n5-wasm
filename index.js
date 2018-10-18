@@ -16,6 +16,11 @@ js
           console.log("volume:" + exists);
         }),
 
+      reader.dataset_exists("volume")
+        .then(exists => {
+          console.log("volume is dataset:" + exists);
+        }),
+
       reader.exists("foobar")
         .then(exists => {
           console.log("foobar:" + exists);

@@ -48,6 +48,8 @@ pub trait N5PromiseReader {
 
     fn exists(&self, path_name: &str) -> Promise;
 
+    fn dataset_exists(&self, path_name: &str) -> Promise;
+
     fn read_block(
         &self,
         path_name: &str,
@@ -75,6 +77,13 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
 
     fn exists(&self, path_name: &str) -> Promise {
         let to_return = self.exists(path_name)
+            .map(JsValue::from);
+
+        future_to_promise(map_future_error_wasm(to_return))
+    }
+
+    fn dataset_exists(&self, path_name: &str) -> Promise {
+        let to_return = self.dataset_exists(path_name)
             .map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
@@ -146,6 +155,14 @@ pub trait N5AsyncReader {
         Box<Future<Item = n5::DatasetAttributes, Error = Error>>;
 
     fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>>;
+
+    fn dataset_exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>> {
+        Box::new(self.exists(path_name).join(
+            self.get_dataset_attributes(path_name)
+                .map(|_| true)
+                .or_else(|_| futures::future::ok(false))
+        ).map(|(exists, has_attr)| exists && has_attr))
+    }
 
     fn read_block<T>(
         &self,
@@ -225,7 +242,7 @@ impl N5HTTPFetch {
     }
 }
 
-// WASM bindings for the N5Reader-mirror trait
+/// Delegations to expose N5PromiseReader trait to WASM.
 #[wasm_bindgen]
 impl N5HTTPFetch {
     pub fn get_version(&self) -> Promise {
@@ -238,6 +255,10 @@ impl N5HTTPFetch {
 
     pub fn exists(&self, path_name: &str) -> Promise {
         N5PromiseReader::exists(self, path_name)
+    }
+
+    pub fn dataset_exists(&self, path_name: &str) -> Promise {
+        N5PromiseReader::dataset_exists(self, path_name)
     }
 
     pub fn read_block(
