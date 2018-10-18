@@ -61,14 +61,14 @@ pub trait N5PromiseReader {
 impl<T> N5PromiseReader for T where T: N5AsyncReader {
     fn get_version(&self) -> Promise {
         let to_return = self.get_version()
-            .map(JsValue::from);
+            .map(|v| JsValue::from(wrapped::Version(v)));
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
     fn get_dataset_attributes(&self, path_name: &str) -> Promise {
         let to_return = self.get_dataset_attributes(path_name)
-            .map(JsValue::from);
+            .map(|da| JsValue::from(wrapped::DatasetAttributes(da)));
 
         future_to_promise(map_future_error_wasm(to_return))
     }
@@ -140,10 +140,10 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
 /// erasing it with `Promise`) and for easier potential future compatibility
 /// with an N5 core async trait.
 pub trait N5AsyncReader {
-    fn get_version(&self) -> Box<Future<Item = wrapped::Version, Error = Error>>;
+    fn get_version(&self) -> Box<Future<Item = n5::Version, Error = Error>>;
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-        Box<Future<Item = wrapped::DatasetAttributes, Error = Error>>;
+        Box<Future<Item = n5::DatasetAttributes, Error = Error>>;
 
     fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>>;
 
@@ -214,7 +214,7 @@ impl N5HTTPFetch {
 
         let to_return = N5AsyncReader::get_version(&reader).and_then(|version| {
 
-            if !n5::VERSION.is_compatible(&version.0) {
+            if !n5::VERSION.is_compatible(&version) {
                 return future::err(Error::new(ErrorKind::Other, "TODO: Incompatible version"))
             }
 
@@ -273,27 +273,24 @@ fn convert_jsvalue_error(error: JsValue) -> Error {
 
 
 impl N5AsyncReader for N5HTTPFetch {
-    fn get_version(&self) -> Box<Future<Item = wrapped::Version, Error = Error>> {
+    fn get_version(&self) -> Box<Future<Item = n5::Version, Error = Error>> {
         let to_return = self.get_attributes("").map(|attr| {
-            wrapped::Version(n5::Version::from_str(attr
+            n5::Version::from_str(attr
                     .get(n5::VERSION_ATTRIBUTE_KEY)
                     .unwrap()
                     .as_str().unwrap_or("")
-                ).unwrap())
+                ).unwrap()
         });
 
         Box::new(to_return)
     }
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-            Box<Future<Item = wrapped::DatasetAttributes, Error = Error>> {
+            Box<Future<Item = n5::DatasetAttributes, Error = Error>> {
 
         let to_return = self
             .fetch_json(&format!("{}/{}", path_name, ATTRIBUTES_FILE))
-            .map(|json| {
-                let da = json.into_serde();
-
-                wrapped::DatasetAttributes(da.unwrap())});
+            .map(|json| { json.into_serde().unwrap() });
 
         Box::new(map_future_error_rust(to_return))
     }
