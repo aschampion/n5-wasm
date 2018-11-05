@@ -5,3 +5,17 @@ Browser-compatible WASM bindings to the [Rust implementation](https://github.com
 N5 datasets must be available via CORS-compatible HTTP. Compatible with Java N5 Version 2.0.2.
 
 Currently only raw and GZIP compression are supported.
+
+## Build Instructions
+
+This assumes you have [rustup](https://rustup.rs/) installed.
+
+```sh
+git clone https://github.com/aschampion/n5-wasm
+cd n5-wasm
+rustup override set nightly
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+wasm-pack build
+```
+
+The built npm package will be in `pkg/`.
