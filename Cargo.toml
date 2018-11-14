@@ -18,10 +18,10 @@ default-features = ["console_error_panic_hook"]
 [dependencies]
 cfg-if = "0.1.2"
 futures = "0.1.20"
-js-sys = "0.3.2"
+js-sys = "0.3.5"
 serde_json = "1.0"
-wasm-bindgen = { version = "0.2.25", features = ["serde-serialize"] }
-wasm-bindgen-futures = "0.3.2"
+wasm-bindgen = { version = "0.2.28", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.3.5"
 
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
@@ -36,7 +36,7 @@ default-features = false
 features = ["gzip", "use_ndarray"]
 
 [dependencies.web-sys]
-version = "0.3.1"
+version = "0.3.5"
 features = [
   'Headers',
   'Request',
