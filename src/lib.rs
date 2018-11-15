@@ -169,7 +169,7 @@ pub trait N5AsyncReader {
     ) -> Box<Future<Item = Option<VecDataBlock<T>>, Error = Error>>
             where DataType: n5::DataBlockCreator<T>,
                   VecDataBlock<T>: DataBlock<T>,
-                  T: 'static;
+                  T: Clone + 'static;
 
     fn list(&self, path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>>;
 
@@ -221,9 +221,13 @@ pub mod wrapped {
             self.0.get_block_size().to_owned()
         }
 
-        // TODO: get_data_type
+        pub fn get_data_type(&self) -> String {
+            self.0.get_data_type().to_string()
+        }
 
-        // TODO: get_compression
+        pub fn get_compression(&self) -> String {
+            self.0.get_compression().to_string()
+        }
 
         pub fn get_ndim(&self) -> usize {
             self.0.get_ndim()

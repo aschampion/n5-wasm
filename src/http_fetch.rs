@@ -147,7 +147,7 @@ impl N5AsyncReader for N5HTTPFetch {
     ) -> Box<Future<Item = Option<VecDataBlock<T>>, Error = Error>>
             where DataType: n5::DataBlockCreator<T>,
                   VecDataBlock<T>: DataBlock<T>,
-                  T: 'static {
+                  T: Clone + 'static {
 
         let da2 = data_attrs.clone();
 
