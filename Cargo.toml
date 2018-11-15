@@ -45,3 +45,7 @@ features = [
   'Response',
   'Window',
 ]
+
+[profile.release]
+lto = true
+
