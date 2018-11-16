@@ -38,25 +38,23 @@ impl N5HTTPFetch {
         JsFuture::from(req_promise)
     }
 
-    fn fetch_json(&self, path_name: &str) -> Box<Future<Item = JsValue, Error = JsValue>> {
-        let to_return = self.fetch(path_name).and_then(|resp_value| {
+    fn fetch_json(&self, path_name: &str) -> impl Future<Item = JsValue, Error = JsValue> {
+        self.fetch(path_name).and_then(|resp_value| {
             assert!(resp_value.is_instance_of::<Response>());
             let resp: Response = resp_value.dyn_into()?;
 
             resp.json()
         }).and_then(|json_value: Promise| {
             JsFuture::from(json_value)
-        });
-
-        Box::new(to_return)
+        })
     }
 
-    fn get_attributes(&self, path_name: &str) -> Box<Future<Item = serde_json::Value, Error = Error>> {
+    fn get_attributes(&self, path_name: &str) -> impl Future<Item = serde_json::Value, Error = Error> {
         let to_return = self
             .fetch_json(&format!("{}/{}", path_name, ATTRIBUTES_FILE))
             .map(|json| json.into_serde().unwrap());
 
-        Box::new(map_future_error_rust(to_return))
+        map_future_error_rust(to_return)
     }
 
     fn relative_block_path(&self, path_name: &str, grid_position: &[i64]) -> String {
@@ -201,7 +199,7 @@ impl N5AsyncReader for N5HTTPFetch {
         path_name: &str,
     ) -> Box<Future<Item = serde_json::Value, Error = Error>> {
 
-        self.get_attributes(path_name)
+        Box::new(self.get_attributes(path_name))
     }
 }
 
