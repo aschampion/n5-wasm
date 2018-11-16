@@ -85,34 +85,34 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
             // when GATs land.
             DataType::UINT8 => future_to_promise(map_future_error_wasm(
                 self.read_block::<u8>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT8))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT8::from))))),
             DataType::UINT16 => future_to_promise(map_future_error_wasm(
                 self.read_block::<u16>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT16))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT16::from))))),
             DataType::UINT32 => future_to_promise(map_future_error_wasm(
                 self.read_block::<u32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT32))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT32::from))))),
             DataType::UINT64 => future_to_promise(map_future_error_wasm(
                 self.read_block::<u64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT64))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT64::from))))),
             DataType::INT8 => future_to_promise(map_future_error_wasm(
                 self.read_block::<i8>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT8))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT8::from))))),
             DataType::INT16 => future_to_promise(map_future_error_wasm(
                 self.read_block::<i16>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT16))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT16::from))))),
             DataType::INT32 => future_to_promise(map_future_error_wasm(
                 self.read_block::<i32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT32))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT32::from))))),
             DataType::INT64 => future_to_promise(map_future_error_wasm(
                 self.read_block::<i64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT64))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT64::from))))),
             DataType::FLOAT32 => future_to_promise(map_future_error_wasm(
                 self.read_block::<f32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT32))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT32::from))))),
             DataType::FLOAT64 => future_to_promise(map_future_error_wasm(
                 self.read_block::<f64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT64))))),
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT64::from))))),
         }
     }
 
@@ -126,6 +126,79 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
             .map(|v| JsValue::from_serde(&v).unwrap());
 
         future_to_promise(map_future_error_wasm(to_return))
+    }
+}
+
+
+pub trait N5PromiseModifiedReader {
+    fn block_modified_time(
+        &self,
+        path_name: &str,
+        data_attrs: &wrapped::DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Promise;
+
+    fn read_block_with_modified_time(
+        &self,
+        path_name: &str,
+        data_attrs: &wrapped::DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Promise;
+}
+
+impl<T> N5PromiseModifiedReader for T where T: N5AsyncModifiedReader {
+    fn block_modified_time(
+        &self,
+        path_name: &str,
+        data_attrs: &wrapped::DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Promise {
+        let to_return = self.block_modified_time(path_name, &data_attrs.0, grid_position)
+            .map(JsValue::from);
+
+        future_to_promise(map_future_error_wasm(to_return))
+    }
+
+    fn read_block_with_modified_time(
+        &self,
+        path_name: &str,
+        data_attrs: &wrapped::DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Promise {
+        match data_attrs.0.get_data_type() {
+            // TODO: presumably can be rid of these monomorphization kludges
+            // when GATs land.
+            DataType::UINT8 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<u8>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT8::from))))),
+            DataType::UINT16 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<u16>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT16::from))))),
+            DataType::UINT32 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<u32>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT32::from))))),
+            DataType::UINT64 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<u64>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT64::from))))),
+            DataType::INT8 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<i8>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT8::from))))),
+            DataType::INT16 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<i16>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT16::from))))),
+            DataType::INT32 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<i32>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT32::from))))),
+            DataType::INT64 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<i64>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT64::from))))),
+            DataType::FLOAT32 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<f32>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT32::from))))),
+            DataType::FLOAT64 => future_to_promise(map_future_error_wasm(
+                self.read_block_with_modified_time::<f64>(path_name, &data_attrs.0, grid_position)
+                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT64::from))))),
+        }
     }
 }
 
@@ -162,6 +235,26 @@ pub trait N5AsyncReader {
     fn list(&self, path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>>;
 
     fn list_attributes(&self, path_name: &str) -> Box<Future<Item = serde_json::Value, Error = Error>>;
+}
+
+
+pub trait N5AsyncModifiedReader {
+    fn block_modified_time(
+        &self,
+        path_name: &str,
+        data_attrs: &DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Box<Future<Item = Option<String>, Error = Error>>;
+
+    fn read_block_with_modified_time<T>(
+        &self,
+        path_name: &str,
+        data_attrs: &DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Box<Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
+            where DataType: n5::DataBlockCreator<T>,
+                  VecDataBlock<T>: DataBlock<T>,
+                  T: Clone + 'static;
 }
 
 
@@ -236,7 +329,19 @@ pub mod wrapped {
 macro_rules! data_block_monomorphizer {
     ($d_name:ident, $d_type:ty) => {
         #[wasm_bindgen]
-        pub struct $d_name(VecDataBlock<$d_type>);
+        pub struct $d_name(VecDataBlock<$d_type>, Option<String>);
+
+        impl From<VecDataBlock<$d_type>> for $d_name {
+            fn from(block: VecDataBlock<$d_type>) -> Self {
+                $d_name(block, None)
+            }
+        }
+
+        impl From<(VecDataBlock<$d_type>, Option<String>)> for $d_name {
+            fn from((block, modified): (VecDataBlock<$d_type>, Option<String>)) -> Self {
+                $d_name(block, modified)
+            }
+        }
 
         #[wasm_bindgen]
         impl $d_name {
@@ -254,6 +359,10 @@ macro_rules! data_block_monomorphizer {
 
             pub fn get_num_elements(&self) -> i32 {
                 self.0.get_num_elements()
+            }
+
+            pub fn get_modified_time(&self) -> Option<String> {
+                self.1.to_owned()
             }
         }
     }

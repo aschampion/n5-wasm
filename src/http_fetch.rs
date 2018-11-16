@@ -58,6 +58,15 @@ impl N5HTTPFetch {
 
         Box::new(map_future_error_rust(to_return))
     }
+
+    fn relative_block_path(&self, path_name: &str, grid_position: &[i64]) -> String {
+        let mut block_path = String::new();
+        for coord in grid_position {
+            write!(block_path, "/{}", coord);
+        }
+
+        format!("{}{}", path_name, block_path)
+    }
 }
 
 #[wasm_bindgen]
@@ -111,6 +120,26 @@ impl N5HTTPFetch {
     pub fn list_attributes(&self, path_name: &str) -> Promise {
         N5PromiseReader::list_attributes(self, path_name)
     }
+
+    pub fn block_modified_time(
+        &self,
+        path_name: &str,
+        data_attrs: &wrapped::DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Promise {
+        N5PromiseModifiedReader::block_modified_time(
+            self, path_name, data_attrs, grid_position)
+    }
+
+    pub fn read_block_with_modified_time(
+        &self,
+        path_name: &str,
+        data_attrs: &wrapped::DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Promise {
+        N5PromiseModifiedReader::read_block_with_modified_time(
+            self, path_name, data_attrs, grid_position)
+    }
 }
 
 impl N5AsyncReader for N5HTTPFetch {
@@ -157,40 +186,9 @@ impl N5AsyncReader for N5HTTPFetch {
                   VecDataBlock<T>: DataBlock<T>,
                   T: Clone + 'static {
 
-        let da2 = data_attrs.clone();
-
-        let mut block_path = String::new();
-        for coord in &grid_position {
-            write!(block_path, "/{}", coord);
-        }
-
-        let f = self.fetch(&format!("{}{}", path_name, block_path)).and_then(|resp_value| {
-            assert!(resp_value.is_instance_of::<Response>());
-            let resp: Response = resp_value.dyn_into().unwrap();
-
-            if resp.ok() {
-                let to_return = JsFuture::from(resp.array_buffer().unwrap())
-                    .map(move |arrbuff_value| {
-                        assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
-                        let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
-
-                        // TODO: tedious buffer copy.
-                        // See: https://github.com/rustwasm/wasm-bindgen/issues/811
-                        let mut buff: Vec<u8> = Vec::with_capacity(typebuff.length() as usize);
-                        typebuff.for_each(&mut |byte, _, _| buff.push(byte));
-
-                        Some(<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
-                            &buff,
-                            &da2,
-                            grid_position).unwrap())
-                    });
-                future::Either::A(to_return)
-            } else  {
-                future::Either::B(future::ok(None))
-            }
-        });
-
-        Box::new(map_future_error_rust(f))
+        Box::new(N5AsyncModifiedReader::read_block_with_modified_time(
+                self, path_name, data_attrs, grid_position)
+            .map(|maybe_block| maybe_block.map(|(block, _modified)| block)))
     }
 
     fn list(&self, _path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>> {
@@ -204,5 +202,85 @@ impl N5AsyncReader for N5HTTPFetch {
     ) -> Box<Future<Item = serde_json::Value, Error = Error>> {
 
         self.get_attributes(path_name)
+    }
+}
+
+impl N5AsyncModifiedReader for N5HTTPFetch {
+    fn block_modified_time(
+        &self,
+        path_name: &str,
+        _data_attrs: &DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Box<Future<Item = Option<String>, Error = Error>> {
+        let mut request_options = RequestInit::new();
+        request_options.method("HEAD");
+        request_options.mode(RequestMode::Cors);
+
+        let block_path = self.relative_block_path(path_name, &grid_position);
+
+        let req = Request::new_with_str_and_init(
+            &format!("{}/{}", &self.base_path, block_path),
+            &request_options).unwrap();
+
+        let req_promise = web_sys::window().unwrap().fetch_with_request(&req);
+
+        let f = JsFuture::from(req_promise)
+            .map(|resp_value| {
+                assert!(resp_value.is_instance_of::<Response>());
+                let resp: Response = resp_value.dyn_into().unwrap();
+
+                if resp.ok() {
+                    resp.headers().get("Last-Modified").unwrap_or(None)
+                } else {
+                    None
+                }
+            });
+
+        Box::new(map_future_error_rust(f))
+    }
+
+    fn read_block_with_modified_time<T>(
+        &self,
+        path_name: &str,
+        data_attrs: &DatasetAttributes,
+        grid_position: Vec<i64>
+    ) -> Box<Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
+            where DataType: n5::DataBlockCreator<T>,
+                  VecDataBlock<T>: DataBlock<T>,
+                  T: Clone + 'static {
+
+        let da2 = data_attrs.clone();
+
+        let block_path = self.relative_block_path(path_name, &grid_position);
+
+        let f = self.fetch(&block_path).and_then(|resp_value| {
+            assert!(resp_value.is_instance_of::<Response>());
+            let resp: Response = resp_value.dyn_into().unwrap();
+
+            if resp.ok() {
+                let modified: Option<String> = resp.headers().get("Last-Modified").unwrap_or(None);
+                let to_return = JsFuture::from(resp.array_buffer().unwrap())
+                    .map(move |arrbuff_value| {
+                        assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
+                        let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
+
+                        // TODO: tedious buffer copy.
+                        // See: https://github.com/rustwasm/wasm-bindgen/issues/811
+                        let mut buff: Vec<u8> = Vec::with_capacity(typebuff.length() as usize);
+                        typebuff.for_each(&mut |byte, _, _| buff.push(byte));
+
+                        Some((<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
+                            &buff,
+                            &da2,
+                            grid_position).unwrap(),
+                            modified))
+                    });
+                future::Either::A(to_return)
+            } else  {
+                future::Either::B(future::ok(None))
+            }
+        });
+
+        Box::new(map_future_error_rust(f))
     }
 }
