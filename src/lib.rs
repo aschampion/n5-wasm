@@ -130,15 +130,15 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
 }
 
 
-pub trait N5PromiseModifiedReader {
-    fn block_modified_time(
+pub trait N5PromiseEtagReader {
+    fn block_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Promise;
 
-    fn read_block_with_modified_time(
+    fn read_block_with_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
@@ -146,20 +146,20 @@ pub trait N5PromiseModifiedReader {
     ) -> Promise;
 }
 
-impl<T> N5PromiseModifiedReader for T where T: N5AsyncModifiedReader {
-    fn block_modified_time(
+impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
+    fn block_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Promise {
-        let to_return = self.block_modified_time(path_name, &data_attrs.0, grid_position)
+        let to_return = self.block_etag(path_name, &data_attrs.0, grid_position)
             .map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
-    fn read_block_with_modified_time(
+    fn read_block_with_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
@@ -169,34 +169,34 @@ impl<T> N5PromiseModifiedReader for T where T: N5AsyncModifiedReader {
             // TODO: presumably can be rid of these monomorphization kludges
             // when GATs land.
             DataType::UINT8 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<u8>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<u8>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT8::from))))),
             DataType::UINT16 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<u16>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<u16>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT16::from))))),
             DataType::UINT32 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<u32>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<u32>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT32::from))))),
             DataType::UINT64 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<u64>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<u64>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT64::from))))),
             DataType::INT8 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<i8>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<i8>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT8::from))))),
             DataType::INT16 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<i16>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<i16>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT16::from))))),
             DataType::INT32 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<i32>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<i32>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT32::from))))),
             DataType::INT64 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<i64>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<i64>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT64::from))))),
             DataType::FLOAT32 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<f32>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<f32>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT32::from))))),
             DataType::FLOAT64 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_modified_time::<f64>(path_name, &data_attrs.0, grid_position)
+                self.read_block_with_etag::<f64>(path_name, &data_attrs.0, grid_position)
                     .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT64::from))))),
         }
     }
@@ -238,15 +238,15 @@ pub trait N5AsyncReader {
 }
 
 
-pub trait N5AsyncModifiedReader {
-    fn block_modified_time(
+pub trait N5AsyncEtagReader {
+    fn block_etag(
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Box<Future<Item = Option<String>, Error = Error>>;
 
-    fn read_block_with_modified_time<T>(
+    fn read_block_with_etag<T>(
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
@@ -338,8 +338,8 @@ macro_rules! data_block_monomorphizer {
         }
 
         impl From<(VecDataBlock<$d_type>, Option<String>)> for $d_name {
-            fn from((block, modified): (VecDataBlock<$d_type>, Option<String>)) -> Self {
-                $d_name(block, modified)
+            fn from((block, etag): (VecDataBlock<$d_type>, Option<String>)) -> Self {
+                $d_name(block, etag)
             }
         }
 
@@ -365,7 +365,7 @@ macro_rules! data_block_monomorphizer {
                 self.0.get_num_elements()
             }
 
-            pub fn get_modified_time(&self) -> Option<String> {
+            pub fn get_etag(&self) -> Option<String> {
                 self.1.to_owned()
             }
         }

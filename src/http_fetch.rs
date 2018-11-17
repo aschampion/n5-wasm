@@ -121,23 +121,23 @@ impl N5HTTPFetch {
         N5PromiseReader::list_attributes(self, path_name)
     }
 
-    pub fn block_modified_time(
+    pub fn block_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Promise {
-        N5PromiseModifiedReader::block_modified_time(
+        N5PromiseEtagReader::block_etag(
             self, path_name, data_attrs, grid_position)
     }
 
-    pub fn read_block_with_modified_time(
+    pub fn read_block_with_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<i64>
     ) -> Promise {
-        N5PromiseModifiedReader::read_block_with_modified_time(
+        N5PromiseEtagReader::read_block_with_etag(
             self, path_name, data_attrs, grid_position)
     }
 }
@@ -188,9 +188,9 @@ impl N5AsyncReader for N5HTTPFetch {
                   VecDataBlock<T>: DataBlock<T>,
                   T: Clone + 'static {
 
-        Box::new(N5AsyncModifiedReader::read_block_with_modified_time(
+        Box::new(N5AsyncEtagReader::read_block_with_etag(
                 self, path_name, data_attrs, grid_position)
-            .map(|maybe_block| maybe_block.map(|(block, _modified)| block)))
+            .map(|maybe_block| maybe_block.map(|(block, _etag)| block)))
     }
 
     fn list(&self, _path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>> {
@@ -207,8 +207,8 @@ impl N5AsyncReader for N5HTTPFetch {
     }
 }
 
-impl N5AsyncModifiedReader for N5HTTPFetch {
-    fn block_modified_time(
+impl N5AsyncEtagReader for N5HTTPFetch {
+    fn block_etag(
         &self,
         path_name: &str,
         _data_attrs: &DatasetAttributes,
@@ -232,7 +232,7 @@ impl N5AsyncModifiedReader for N5HTTPFetch {
                 let resp: Response = resp_value.dyn_into().unwrap();
 
                 if resp.ok() {
-                    resp.headers().get("Last-Modified").unwrap_or(None)
+                    resp.headers().get("ETag").unwrap_or(None)
                 } else {
                     None
                 }
@@ -241,7 +241,7 @@ impl N5AsyncModifiedReader for N5HTTPFetch {
         Box::new(map_future_error_rust(f))
     }
 
-    fn read_block_with_modified_time<T>(
+    fn read_block_with_etag<T>(
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
@@ -260,7 +260,7 @@ impl N5AsyncModifiedReader for N5HTTPFetch {
             let resp: Response = resp_value.dyn_into().unwrap();
 
             if resp.ok() {
-                let modified: Option<String> = resp.headers().get("Last-Modified").unwrap_or(None);
+                let etag: Option<String> = resp.headers().get("ETag").unwrap_or(None);
                 let to_return = JsFuture::from(resp.array_buffer().unwrap())
                     .map(move |arrbuff_value| {
                         assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
@@ -275,7 +275,7 @@ impl N5AsyncModifiedReader for N5HTTPFetch {
                             &buff,
                             &da2,
                             grid_position).unwrap(),
-                            modified))
+                            etag))
                     });
                 future::Either::A(to_return)
             } else  {
