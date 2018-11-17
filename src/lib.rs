@@ -357,6 +357,10 @@ macro_rules! data_block_monomorphizer {
                 self.0.get_data().to_owned()
             }
 
+            pub fn into_data(self) -> Vec<$d_type> {
+                self.0.into()
+            }
+
             pub fn get_num_elements(&self) -> i32 {
                 self.0.get_num_elements()
             }
