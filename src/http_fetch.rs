@@ -62,7 +62,7 @@ impl N5HTTPFetch {
     fn relative_block_path(&self, path_name: &str, grid_position: &[i64]) -> String {
         let mut block_path = String::new();
         for coord in grid_position {
-            write!(block_path, "/{}", coord);
+            write!(block_path, "/{}", coord).unwrap();
         }
 
         format!("{}{}", path_name, block_path)
@@ -266,10 +266,8 @@ impl N5AsyncEtagReader for N5HTTPFetch {
                         assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
                         let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
 
-                        // TODO: tedious buffer copy.
-                        // See: https://github.com/rustwasm/wasm-bindgen/issues/811
-                        let mut buff: Vec<u8> = Vec::with_capacity(typebuff.length() as usize);
-                        typebuff.for_each(&mut |byte, _, _| buff.push(byte));
+                        let mut buff: Vec<u8> = vec![0; typebuff.length() as usize];
+                        typebuff.copy_to(buff.as_mut_slice());
 
                         Some((<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
                             &buff,
