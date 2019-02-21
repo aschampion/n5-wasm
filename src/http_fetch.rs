@@ -50,8 +50,7 @@ impl N5HTTPFetch {
     }
 
     fn get_attributes(&self, path_name: &str) -> impl Future<Item = serde_json::Value, Error = Error> {
-        let path = if path_name.is_empty() { ATTRIBUTES_FILE.to_owned() }
-            else { format!("{}/{}", path_name, ATTRIBUTES_FILE) };
+        let path = self.get_dataset_attributes_path(path_name);
         let to_return = self
             .fetch_json(&path)
             .map(|json| json.into_serde().unwrap());
@@ -66,6 +65,14 @@ impl N5HTTPFetch {
         }
 
         format!("{}{}", path_name, block_path)
+    }
+
+    fn get_dataset_attributes_path(&self, path_name: &str) -> String {
+        if path_name.is_empty() {
+            ATTRIBUTES_FILE.to_owned()
+        } else {
+            format!("{}/{}", path_name, ATTRIBUTES_FILE)
+        }
     }
 }
 
@@ -158,8 +165,7 @@ impl N5AsyncReader for N5HTTPFetch {
     fn get_dataset_attributes(&self, path_name: &str) ->
             Box<Future<Item = n5::DatasetAttributes, Error = Error>> {
 
-        let path = if path_name.is_empty() { ATTRIBUTES_FILE.to_owned() }
-            else { format!("{}/{}", path_name, ATTRIBUTES_FILE) };
+        let path = self.get_dataset_attributes_path(path_name);
         let to_return = self
             .fetch_json(&path)
             .map(|json| { json.into_serde().unwrap() });
@@ -176,6 +182,13 @@ impl N5AsyncReader for N5HTTPFetch {
         });
 
         Box::new(map_future_error_rust(to_return))
+    }
+
+    // Override the default N5AsyncReader impl to not require the GET on the
+    // dataset directory path to be 200.
+    fn dataset_exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>> {
+        let path = self.get_dataset_attributes_path(path_name);
+        N5AsyncReader::exists(self, &path)
     }
 
     fn read_block<T>(
