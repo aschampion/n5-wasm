@@ -59,12 +59,12 @@ impl N5HTTPFetch {
     }
 
     fn relative_block_path(&self, path_name: &str, grid_position: &[i64]) -> String {
-        let mut block_path = String::new();
+        let mut block_path = path_name.to_owned();
         for coord in grid_position {
             write!(block_path, "/{}", coord).unwrap();
         }
 
-        format!("{}{}", path_name, block_path)
+        block_path
     }
 
     fn get_dataset_attributes_path(&self, path_name: &str) -> String {
