@@ -20,6 +20,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use n5::prelude::*;
+use n5::{data_type_match, data_type_rstype_replace};
 
 
 pub mod http_fetch;
@@ -39,7 +40,7 @@ pub trait N5PromiseReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise;
 
     fn list_attributes(&self, path_name: &str) -> Promise;
@@ -78,41 +79,15 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise {
-        match data_attrs.0.get_data_type() {
-            // TODO: presumably can be rid of these monomorphization kludges
-            // when GATs land.
-            DataType::UINT8 => future_to_promise(map_future_error_wasm(
-                self.read_block::<u8>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT8::from))))),
-            DataType::UINT16 => future_to_promise(map_future_error_wasm(
-                self.read_block::<u16>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT16::from))))),
-            DataType::UINT32 => future_to_promise(map_future_error_wasm(
-                self.read_block::<u32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT32::from))))),
-            DataType::UINT64 => future_to_promise(map_future_error_wasm(
-                self.read_block::<u64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT64::from))))),
-            DataType::INT8 => future_to_promise(map_future_error_wasm(
-                self.read_block::<i8>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT8::from))))),
-            DataType::INT16 => future_to_promise(map_future_error_wasm(
-                self.read_block::<i16>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT16::from))))),
-            DataType::INT32 => future_to_promise(map_future_error_wasm(
-                self.read_block::<i32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT32::from))))),
-            DataType::INT64 => future_to_promise(map_future_error_wasm(
-                self.read_block::<i64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT64::from))))),
-            DataType::FLOAT32 => future_to_promise(map_future_error_wasm(
-                self.read_block::<f32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT32::from))))),
-            DataType::FLOAT64 => future_to_promise(map_future_error_wasm(
-                self.read_block::<f64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT64::from))))),
+
+        data_type_match! {
+            data_attrs.0.get_data_type(),
+            future_to_promise(map_future_error_wasm(
+                self.read_block::<RsType>(path_name, &data_attrs.0, grid_position.into())
+                    .map(|maybe_block| JsValue::from(
+                        maybe_block.map(<RsType as VecBlockMonomorphizerReflection>::MONOMORPH::from)))))
         }
     }
 
@@ -135,14 +110,14 @@ pub trait N5PromiseEtagReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise;
 
     fn read_block_with_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise;
 }
 
@@ -151,9 +126,9 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise {
-        let to_return = self.block_etag(path_name, &data_attrs.0, grid_position)
+        let to_return = self.block_etag(path_name, &data_attrs.0, grid_position.into())
             .map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
@@ -163,41 +138,15 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise {
-        match data_attrs.0.get_data_type() {
-            // TODO: presumably can be rid of these monomorphization kludges
-            // when GATs land.
-            DataType::UINT8 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<u8>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT8::from))))),
-            DataType::UINT16 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<u16>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT16::from))))),
-            DataType::UINT32 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<u32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT32::from))))),
-            DataType::UINT64 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<u64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockUINT64::from))))),
-            DataType::INT8 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<i8>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT8::from))))),
-            DataType::INT16 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<i16>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT16::from))))),
-            DataType::INT32 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<i32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT32::from))))),
-            DataType::INT64 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<i64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockINT64::from))))),
-            DataType::FLOAT32 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<f32>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT32::from))))),
-            DataType::FLOAT64 => future_to_promise(map_future_error_wasm(
-                self.read_block_with_etag::<f64>(path_name, &data_attrs.0, grid_position)
-                    .map(|maybe_block| JsValue::from(maybe_block.map(VecDataBlockFLOAT64::from))))),
+
+        data_type_match! {
+            data_attrs.0.get_data_type(),
+            future_to_promise(map_future_error_wasm(
+                self.read_block_with_etag::<RsType>(path_name, &data_attrs.0, grid_position.into())
+                    .map(|maybe_block| JsValue::from(
+                        maybe_block.map(<RsType as VecBlockMonomorphizerReflection>::MONOMORPH::from)))))
         }
     }
 }
@@ -207,14 +156,14 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
 /// erasing it with `Promise`) and for easier potential future compatibility
 /// with an N5 core async trait.
 pub trait N5AsyncReader {
-    fn get_version(&self) -> Box<Future<Item = n5::Version, Error = Error>>;
+    fn get_version(&self) -> Box<dyn Future<Item = n5::Version, Error = Error>>;
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-        Box<Future<Item = n5::DatasetAttributes, Error = Error>>;
+        Box<dyn Future<Item = n5::DatasetAttributes, Error = Error>>;
 
-    fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>>;
+    fn exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>>;
 
-    fn dataset_exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>> {
+    fn dataset_exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>> {
         Box::new(self.exists(path_name).join(
             self.get_dataset_attributes(path_name)
                 .map(|_| true)
@@ -226,15 +175,14 @@ pub trait N5AsyncReader {
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
-        grid_position: Vec<i64>
-    ) -> Box<Future<Item = Option<VecDataBlock<T>>, Error = Error>>
-            where DataType: n5::DataBlockCreator<T>,
-                  VecDataBlock<T>: DataBlock<T>,
-                  T: Clone + 'static;
+        grid_position: GridCoord,
+    ) -> Box<dyn Future<Item = Option<VecDataBlock<T>>, Error = Error>>
+            where VecDataBlock<T>: DataBlock<T>,
+                  T: ReflectedType + 'static;
 
-    fn list(&self, path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>>;
+    fn list(&self, path_name: &str) -> Box<dyn Future<Item = Vec<String>, Error = Error>>;
 
-    fn list_attributes(&self, path_name: &str) -> Box<Future<Item = serde_json::Value, Error = Error>>;
+    fn list_attributes(&self, path_name: &str) -> Box<dyn Future<Item = serde_json::Value, Error = Error>>;
 }
 
 
@@ -243,18 +191,17 @@ pub trait N5AsyncEtagReader {
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
-        grid_position: Vec<i64>
-    ) -> Box<Future<Item = Option<String>, Error = Error>>;
+        grid_position: GridCoord,
+    ) -> Box<dyn Future<Item = Option<String>, Error = Error>>;
 
     fn read_block_with_etag<T>(
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
-        grid_position: Vec<i64>
-    ) -> Box<Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
-            where DataType: n5::DataBlockCreator<T>,
-                  VecDataBlock<T>: DataBlock<T>,
-                  T: Clone + 'static;
+        grid_position: GridCoord,
+    ) -> Box<dyn Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
+            where VecDataBlock<T>: DataBlock<T>,
+                  T: ReflectedType + 'static;
 }
 
 
@@ -326,10 +273,18 @@ pub mod wrapped {
     }
 }
 
+trait VecBlockMonomorphizerReflection {
+    type MONOMORPH;
+}
+
 macro_rules! data_block_monomorphizer {
     ($d_name:ident, $d_type:ty) => {
         #[wasm_bindgen]
         pub struct $d_name(VecDataBlock<$d_type>, Option<String>);
+
+        impl VecBlockMonomorphizerReflection for $d_type {
+            type MONOMORPH = $d_name;
+        }
 
         impl From<VecDataBlock<$d_type>> for $d_name {
             fn from(block: VecDataBlock<$d_type>) -> Self {

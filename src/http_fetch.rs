@@ -119,7 +119,7 @@ impl N5HTTPFetch {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise {
         N5PromiseReader::read_block(self, path_name, data_attrs, grid_position)
     }
@@ -132,7 +132,7 @@ impl N5HTTPFetch {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<i64>,
     ) -> Promise {
         N5PromiseEtagReader::block_etag(
             self, path_name, data_attrs, grid_position)
@@ -150,7 +150,7 @@ impl N5HTTPFetch {
 }
 
 impl N5AsyncReader for N5HTTPFetch {
-    fn get_version(&self) -> Box<Future<Item = n5::Version, Error = Error>> {
+    fn get_version(&self) -> Box<dyn Future<Item = n5::Version, Error = Error>> {
         let to_return = self.get_attributes("").map(|attr| {
             n5::Version::from_str(attr
                     .get(n5::VERSION_ATTRIBUTE_KEY)
@@ -163,7 +163,7 @@ impl N5AsyncReader for N5HTTPFetch {
     }
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-            Box<Future<Item = n5::DatasetAttributes, Error = Error>> {
+            Box<dyn Future<Item = n5::DatasetAttributes, Error = Error>> {
 
         let path = self.get_dataset_attributes_path(path_name);
         let to_return = self
@@ -173,7 +173,7 @@ impl N5AsyncReader for N5HTTPFetch {
         Box::new(map_future_error_rust(to_return))
     }
 
-    fn exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>> {
+    fn exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>> {
         let to_return = self.fetch(path_name).and_then(|resp_value| {
             assert!(resp_value.is_instance_of::<Response>());
             let resp: Response = resp_value.dyn_into().unwrap();
@@ -186,7 +186,7 @@ impl N5AsyncReader for N5HTTPFetch {
 
     // Override the default N5AsyncReader impl to not require the GET on the
     // dataset directory path to be 200.
-    fn dataset_exists(&self, path_name: &str) -> Box<Future<Item = bool, Error = Error>> {
+    fn dataset_exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>> {
         let path = self.get_dataset_attributes_path(path_name);
         N5AsyncReader::exists(self, &path)
     }
@@ -195,18 +195,17 @@ impl N5AsyncReader for N5HTTPFetch {
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
-        grid_position: Vec<i64>
-    ) -> Box<Future<Item = Option<VecDataBlock<T>>, Error = Error>>
-            where DataType: n5::DataBlockCreator<T>,
-                  VecDataBlock<T>: DataBlock<T>,
-                  T: Clone + 'static {
+        grid_position: GridCoord,
+    ) -> Box<dyn Future<Item = Option<VecDataBlock<T>>, Error = Error>>
+            where VecDataBlock<T>: DataBlock<T>,
+                  T: ReflectedType + 'static {
 
         Box::new(N5AsyncEtagReader::read_block_with_etag(
                 self, path_name, data_attrs, grid_position)
             .map(|maybe_block| maybe_block.map(|(block, _etag)| block)))
     }
 
-    fn list(&self, _path_name: &str) -> Box<Future<Item = Vec<String>, Error = Error>> {
+    fn list(&self, _path_name: &str) -> Box<dyn Future<Item = Vec<String>, Error = Error>> {
         // TODO: Not implemented because remote paths are not listable.
         unimplemented!()
     }
@@ -214,7 +213,7 @@ impl N5AsyncReader for N5HTTPFetch {
     fn list_attributes(
         &self,
         path_name: &str,
-    ) -> Box<Future<Item = serde_json::Value, Error = Error>> {
+    ) -> Box<dyn Future<Item = serde_json::Value, Error = Error>> {
 
         Box::new(self.get_attributes(path_name))
     }
@@ -225,8 +224,8 @@ impl N5AsyncEtagReader for N5HTTPFetch {
         &self,
         path_name: &str,
         _data_attrs: &DatasetAttributes,
-        grid_position: Vec<i64>
-    ) -> Box<Future<Item = Option<String>, Error = Error>> {
+        grid_position: GridCoord,
+    ) -> Box<dyn Future<Item = Option<String>, Error = Error>> {
         let mut request_options = RequestInit::new();
         request_options.method("HEAD");
         request_options.mode(RequestMode::Cors);
@@ -258,11 +257,10 @@ impl N5AsyncEtagReader for N5HTTPFetch {
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
-        grid_position: Vec<i64>
-    ) -> Box<Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
-            where DataType: n5::DataBlockCreator<T>,
-                  VecDataBlock<T>: DataBlock<T>,
-                  T: Clone + 'static {
+        grid_position: GridCoord,
+    ) -> Box<dyn Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
+            where VecDataBlock<T>: DataBlock<T>,
+                  T: ReflectedType + 'static {
 
         let da2 = data_attrs.clone();
 

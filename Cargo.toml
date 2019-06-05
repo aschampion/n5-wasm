@@ -31,7 +31,7 @@ wasm-bindgen-futures = "0.3.20"
 console_error_panic_hook = { version = "0.1.6", optional = true }
 
 [dependencies.n5]
-version = "0.3.0"
+version = "0.4.0"
 default-features = false
 features = ["gzip", "use_ndarray"]
 
