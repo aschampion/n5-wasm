@@ -151,13 +151,12 @@ impl N5HTTPFetch {
 
 impl N5AsyncReader for N5HTTPFetch {
     fn get_version(&self) -> Box<dyn Future<Item = n5::Version, Error = Error>> {
-        let to_return = self.get_attributes("").map(|attr| {
-            n5::Version::from_str(attr
-                    .get(n5::VERSION_ATTRIBUTE_KEY)
-                    .unwrap()
-                    .as_str().unwrap_or("")
-                ).unwrap()
-        });
+        let to_return = self.get_attributes("")
+            .and_then(|attr| {
+                let ver = attr.get(n5::VERSION_ATTRIBUTE_KEY)
+                    .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not an N5 root"))?;
+                Ok(n5::Version::from_str(ver.as_str().unwrap_or("")).unwrap())
+            });
 
         Box::new(to_return)
     }
