@@ -14,7 +14,7 @@ use std::io::{
 };
 
 use js_sys::Promise;
-use futures::{future, Future};
+use futures::{future::{self, BoxFuture, LocalBoxFuture}, Future, FutureExt, TryFutureExt};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
@@ -48,28 +48,28 @@ pub trait N5PromiseReader {
 impl<T> N5PromiseReader for T where T: N5AsyncReader {
     fn get_version(&self) -> Promise {
         let to_return = self.get_version()
-            .map(|v| JsValue::from(wrapped::Version(v)));
+            .map_ok(|v| JsValue::from(wrapped::Version(v)));
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
     fn get_dataset_attributes(&self, path_name: &str) -> Promise {
         let to_return = self.get_dataset_attributes(path_name)
-            .map(|da| JsValue::from(wrapped::DatasetAttributes(da)));
+            .map_ok(|da| JsValue::from(wrapped::DatasetAttributes(da)));
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
     fn exists(&self, path_name: &str) -> Promise {
         let to_return = self.exists(path_name)
-            .map(JsValue::from);
+            .map_ok(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
     fn dataset_exists(&self, path_name: &str) -> Promise {
         let to_return = self.dataset_exists(path_name)
-            .map(JsValue::from);
+            .map_ok(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
     }
@@ -85,7 +85,7 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
             data_attrs.0.get_data_type(),
             future_to_promise(map_future_error_wasm(
                 self.read_block::<RsType>(path_name, &data_attrs.0, grid_position.into())
-                    .map(|maybe_block| JsValue::from(
+                    .map_ok(|maybe_block| JsValue::from(
                         maybe_block.map(<RsType as VecBlockMonomorphizerReflection>::MONOMORPH::from)))))
         }
     }
@@ -97,7 +97,7 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
 
         // TODO: Superfluous conversion from JSON to JsValue to serde to JsValue.
         let to_return = self.list_attributes(path_name)
-            .map(|v| JsValue::from_serde(&v).unwrap());
+            .map_ok(|v| JsValue::from_serde(&v).unwrap());
 
         future_to_promise(map_future_error_wasm(to_return))
     }
@@ -128,7 +128,7 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
         grid_position: Vec<i64>,
     ) -> Promise {
         let to_return = self.block_etag(path_name, &data_attrs.0, grid_position.into())
-            .map(JsValue::from);
+            .map_ok(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
     }
@@ -144,7 +144,7 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
             data_attrs.0.get_data_type(),
             future_to_promise(map_future_error_wasm(
                 self.read_block_with_etag::<RsType>(path_name, &data_attrs.0, grid_position.into())
-                    .map(|maybe_block| JsValue::from(
+                    .map_ok(|maybe_block| JsValue::from(
                         maybe_block.map(<RsType as VecBlockMonomorphizerReflection>::MONOMORPH::from)))))
         }
     }
@@ -155,19 +155,22 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
 /// erasing it with `Promise`) and for easier potential future compatibility
 /// with an N5 core async trait.
 pub trait N5AsyncReader {
-    fn get_version(&self) -> Box<dyn Future<Item = n5::Version, Error = Error>>;
+    fn get_version(&self) -> BoxFuture<'static, Result<n5::Version, Error>>;
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-        Box<dyn Future<Item = n5::DatasetAttributes, Error = Error>>;
+        BoxFuture<'static, Result<n5::DatasetAttributes, Error>>;
 
-    fn exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>>;
+    fn exists(&self, path_name: &str) -> LocalBoxFuture<'static, Result<bool, Error>>;
 
-    fn dataset_exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>> {
-        Box::new(self.exists(path_name).join(
+    fn dataset_exists(&self, path_name: &str) -> BoxFuture<'static, Result<bool, Error>> {
+        futures::join!(
+            self.exists(path_name),
             self.get_dataset_attributes(path_name)
-                .map(|_| true)
-                .or_else(|_| futures::future::ok(false))
-        ).map(|(exists, has_attr)| exists && has_attr))
+                    .map_ok(|_| true)
+                    .or_else(|_| futures::future::ok(false))
+            )
+            .map_ok(|(exists, has_attr)| exists && has_attr)
+            .boxed()
     }
 
     fn read_block<T>(
@@ -175,13 +178,13 @@ pub trait N5AsyncReader {
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> Box<dyn Future<Item = Option<VecDataBlock<T>>, Error = Error>>
+    ) -> BoxFuture<'static, Result<Option<VecDataBlock<T>>, Error>>
             where VecDataBlock<T>: DataBlock<T>,
                   T: ReflectedType + 'static;
 
-    fn list(&self, path_name: &str) -> Box<dyn Future<Item = Vec<String>, Error = Error>>;
+    fn list(&self, path_name: &str) -> BoxFuture<'static, Result<Vec<String>, Error>>;
 
-    fn list_attributes(&self, path_name: &str) -> Box<dyn Future<Item = serde_json::Value, Error = Error>>;
+    fn list_attributes(&self, path_name: &str) -> BoxFuture<'static, Result<serde_json::Value, Error>>;
 }
 
 
@@ -191,26 +194,26 @@ pub trait N5AsyncEtagReader {
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> Box<dyn Future<Item = Option<String>, Error = Error>>;
+    ) -> BoxFuture<'static, Result<Option<String>, Error>>;
 
     fn read_block_with_etag<T>(
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> Box<dyn Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
+    ) -> BoxFuture<'static, Result<Option<(VecDataBlock<T>, Option<String>)>, Error>>
             where VecDataBlock<T>: DataBlock<T>,
                   T: ReflectedType + 'static;
 }
 
 
-fn map_future_error_rust<F: Future<Item = T, Error = JsValue>, T>(future: F)
-        -> impl Future<Item = T, Error = Error> {
+fn map_future_error_rust<F: Future<Output=Result<T, JsValue>>, T>(future: F)
+        -> impl Future<Output=Result<T, Error>> {
     future.map_err(convert_jsvalue_error)
 }
 
-fn map_future_error_wasm<F: Future<Item = T, Error = Error>, T>(future: F)
-        -> impl Future<Item = T, Error = JsValue> {
+fn map_future_error_wasm<F: Future<Output=Result<T, Error>>, T>(future: F)
+        -> impl Future<Output=Result<T, JsValue>> {
     future.map_err(|error| {
         let js_error = js_sys::Error::new(&format!("{:?}", error));
         JsValue::from(js_error)
