@@ -275,9 +275,7 @@ impl N5AsyncEtagReader for N5HTTPFetch {
                     .map(move |arrbuff_value| {
                         assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
                         let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
-
-                        let mut buff: Vec<u8> = vec![0; typebuff.length() as usize];
-                        typebuff.copy_to(buff.as_mut_slice());
+                        let buff = typebuff.to_vec();
 
                         Some((<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
                             &buff,
