@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::str::FromStr;
 
+use future::TryFuture;
 use js_sys::ArrayBuffer;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -38,18 +39,28 @@ impl N5HTTPFetch {
         JsFuture::from(req_promise)
     }
 
-    fn fetch_json(&self, path_name: &str) -> impl futures::TryFuture<Ok=JsValue, Error=JsValue> {
-        self.fetch(path_name).and_then(|resp_value| {
-            assert!(resp_value.is_instance_of::<Response>());
-            let resp: Response = resp_value.dyn_into()?;
+    async fn fetch_json(&self, path_name: &str) -> Result<JsValue, JsValue> {
+        let resp_value = self.fetch(path_name).await?;
 
-            resp.json()
-        }).and_then(|json_value: Promise| {
-            JsFuture::from(json_value)
-        })
+        assert!(resp_value.is_instance_of::<Response>());
+        let resp: Response = resp_value.dyn_into()?;
+
+        JsFuture::from(resp.json()?).await?
     }
 
-    fn get_attributes(&self, path_name: &str) -> impl futures::TryFuture<Ok=serde_json::Value, Error=Error> {
+    // fn fetch_json(&self, path_name: &str) -> impl TryFuture<Ok=JsValue, Error=JsValue> {
+    //     self.fetch(path_name).and_then(|resp_value| {
+    //         assert!(resp_value.is_instance_of::<Response>());
+    //         let resp: Response = resp_value.dyn_into()?;
+
+    //         resp.json()
+    //     }).and_then(|json_value: Promise| {
+    //         JsFuture::from(json_value)
+    //     })
+    // }
+
+    fn get_attributes(&self, path_name: &str) ->
+            impl TryFuture<Ok=serde_json::Value, Error=Error> + Future<Output=Result<serde_json::Value, Error>> {
         let path = self.get_dataset_attributes_path(path_name);
         let to_return = self
             .fetch_json(&path)
@@ -150,7 +161,7 @@ impl N5HTTPFetch {
 }
 
 impl N5AsyncReader for N5HTTPFetch {
-    fn get_version(&self) -> LocalBoxFuture<Result<n5::Version, Error>> {
+    fn get_version(&self) -> LocalBoxFuture<'static, Result<n5::Version, Error>> {
         let to_return = self.get_attributes("")
             .and_then(|attr| {
                 let ver = attr.get(n5::VERSION_ATTRIBUTE_KEY)
@@ -162,17 +173,17 @@ impl N5AsyncReader for N5HTTPFetch {
     }
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-            BoxFuture<Result<n5::DatasetAttributes, Error>> {
+        LocalBoxFuture<'static, Result<n5::DatasetAttributes, Error>> {
 
         let path = self.get_dataset_attributes_path(path_name);
         let to_return = self
             .fetch_json(&path)
-            .map(|json| { json.into_serde().unwrap() });
+            .map_ok(|json| { json.into_serde().unwrap() });
 
         map_future_error_rust(to_return).boxed()
     }
 
-    fn exists(&self, path_name: &str) -> LocalBoxFuture<Result<bool, Error>> {
+    fn exists(&self, path_name: &str) -> LocalBoxFuture<'static, Result<bool, Error>> {
         let to_return = self.fetch(path_name).and_then(|resp_value| {
             assert!(resp_value.is_instance_of::<Response>());
             let resp: Response = resp_value.dyn_into().unwrap();
@@ -185,7 +196,7 @@ impl N5AsyncReader for N5HTTPFetch {
 
     // Override the default N5AsyncReader impl to not require the GET on the
     // dataset directory path to be 200.
-    fn dataset_exists(&self, path_name: &str) -> BoxFuture<Result<bool, Error>> {
+    fn dataset_exists(&self, path_name: &str) -> LocalBoxFuture<'static, Result<bool, Error>> {
         let path = self.get_dataset_attributes_path(path_name);
         N5AsyncReader::exists(self, &path)
     }
@@ -195,16 +206,17 @@ impl N5AsyncReader for N5HTTPFetch {
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> BoxFuture<Result<Option<VecDataBlock<T>>, Error>>
+    ) -> LocalBoxFuture<'static, Result<Option<VecDataBlock<T>>, Error>>
             where VecDataBlock<T>: DataBlock<T>,
                   T: ReflectedType + 'static {
 
-        Box::new(N5AsyncEtagReader::read_block_with_etag(
+        N5AsyncEtagReader::read_block_with_etag(
                 self, path_name, data_attrs, grid_position)
-            .map(|maybe_block| maybe_block.map(|(block, _etag)| block)))
+            .map_ok(|maybe_block| maybe_block.map(|(block, _etag)| block))
+            .boxed_local()
     }
 
-    fn list(&self, _path_name: &str) -> BoxFuture<Result<Vec<String>, Error>> {
+    fn list(&self, _path_name: &str) -> LocalBoxFuture<'static, Result<Vec<String>, Error>> {
         // TODO: Not implemented because remote paths are not listable.
         unimplemented!()
     }
@@ -212,9 +224,9 @@ impl N5AsyncReader for N5HTTPFetch {
     fn list_attributes(
         &self,
         path_name: &str,
-    ) -> BoxFuture<Result<serde_json::Value, Error>> {
+    ) -> LocalBoxFuture<'static, Result<serde_json::Value, Error>> {
 
-        Box::new(self.get_attributes(path_name))
+        self.get_attributes(path_name).boxed_local()
     }
 }
 
@@ -224,7 +236,7 @@ impl N5AsyncEtagReader for N5HTTPFetch {
         path_name: &str,
         _data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> BoxFuture<Result<Option<String>, Error>> {
+    ) -> LocalBoxFuture<'static, Result<Option<String>, Error>> {
         let mut request_options = RequestInit::new();
         request_options.method("HEAD");
         request_options.mode(RequestMode::Cors);
@@ -238,7 +250,7 @@ impl N5AsyncEtagReader for N5HTTPFetch {
         let req_promise = web_sys::window().unwrap().fetch_with_request(&req);
 
         let f = JsFuture::from(req_promise)
-            .map(|resp_value| {
+            .map_ok(|resp_value| {
                 assert!(resp_value.is_instance_of::<Response>());
                 let resp: Response = resp_value.dyn_into().unwrap();
 
@@ -249,7 +261,7 @@ impl N5AsyncEtagReader for N5HTTPFetch {
                 }
             });
 
-        Box::new(map_future_error_rust(f))
+        map_future_error_rust(f).boxed_local()
     }
 
     fn read_block_with_etag<T>(
@@ -257,7 +269,7 @@ impl N5AsyncEtagReader for N5HTTPFetch {
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> BoxFuture<Result<Option<(VecDataBlock<T>, Option<String>)>, Error>>
+    ) -> LocalBoxFuture<'static, Result<Option<(VecDataBlock<T>, Option<String>)>, Error>>
             where VecDataBlock<T>: DataBlock<T>,
                   T: ReflectedType + 'static {
 
@@ -272,7 +284,7 @@ impl N5AsyncEtagReader for N5HTTPFetch {
             if resp.ok() {
                 let etag: Option<String> = resp.headers().get("ETag").unwrap_or(None);
                 let to_return = JsFuture::from(resp.array_buffer().unwrap())
-                    .map(move |arrbuff_value| {
+                    .map_ok(move |arrbuff_value| {
                         assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
                         let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
 
@@ -285,12 +297,12 @@ impl N5AsyncEtagReader for N5HTTPFetch {
                             grid_position).unwrap(),
                             etag))
                     });
-                future::Either::A(to_return)
+                future::Either::Left(to_return)
             } else  {
-                future::Either::B(future::ok(None))
+                future::Either::Right(future::ok(None))
             }
         });
 
-        Box::new(map_future_error_rust(f))
+        map_future_error_rust(f).boxed_local()
     }
 }

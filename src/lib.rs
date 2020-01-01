@@ -14,7 +14,7 @@ use std::io::{
 };
 
 use js_sys::Promise;
-use futures::{future::{self, BoxFuture, LocalBoxFuture}, Future, FutureExt, TryFutureExt};
+use futures::{future::{self, LocalBoxFuture}, Future, FutureExt, TryFutureExt};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
@@ -155,22 +155,22 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
 /// erasing it with `Promise`) and for easier potential future compatibility
 /// with an N5 core async trait.
 pub trait N5AsyncReader {
-    fn get_version(&self) -> BoxFuture<'static, Result<n5::Version, Error>>;
+    fn get_version(&self) -> LocalBoxFuture<'static, Result<n5::Version, Error>>;
 
     fn get_dataset_attributes(&self, path_name: &str) ->
-        BoxFuture<'static, Result<n5::DatasetAttributes, Error>>;
+        LocalBoxFuture<'static, Result<n5::DatasetAttributes, Error>>;
 
     fn exists(&self, path_name: &str) -> LocalBoxFuture<'static, Result<bool, Error>>;
 
-    fn dataset_exists(&self, path_name: &str) -> BoxFuture<'static, Result<bool, Error>> {
-        futures::join!(
+    fn dataset_exists(&self, path_name: &str) -> LocalBoxFuture<'static, Result<bool, Error>> {
+        futures::future::try_join(
             self.exists(path_name),
             self.get_dataset_attributes(path_name)
                     .map_ok(|_| true)
                     .or_else(|_| futures::future::ok(false))
             )
             .map_ok(|(exists, has_attr)| exists && has_attr)
-            .boxed()
+            .boxed_local()
     }
 
     fn read_block<T>(
@@ -178,13 +178,13 @@ pub trait N5AsyncReader {
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> BoxFuture<'static, Result<Option<VecDataBlock<T>>, Error>>
+    ) -> LocalBoxFuture<'static, Result<Option<VecDataBlock<T>>, Error>>
             where VecDataBlock<T>: DataBlock<T>,
                   T: ReflectedType + 'static;
 
-    fn list(&self, path_name: &str) -> BoxFuture<'static, Result<Vec<String>, Error>>;
+    fn list(&self, path_name: &str) -> LocalBoxFuture<'static, Result<Vec<String>, Error>>;
 
-    fn list_attributes(&self, path_name: &str) -> BoxFuture<'static, Result<serde_json::Value, Error>>;
+    fn list_attributes(&self, path_name: &str) -> LocalBoxFuture<'static, Result<serde_json::Value, Error>>;
 }
 
 
@@ -194,14 +194,14 @@ pub trait N5AsyncEtagReader {
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> BoxFuture<'static, Result<Option<String>, Error>>;
+    ) -> LocalBoxFuture<'static, Result<Option<String>, Error>>;
 
     fn read_block_with_etag<T>(
         &self,
         path_name: &str,
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
-    ) -> BoxFuture<'static, Result<Option<(VecDataBlock<T>, Option<String>)>, Error>>
+    ) -> LocalBoxFuture<'static, Result<Option<(VecDataBlock<T>, Option<String>)>, Error>>
             where VecDataBlock<T>: DataBlock<T>,
                   T: ReflectedType + 'static;
 }
