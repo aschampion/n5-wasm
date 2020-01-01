@@ -3,6 +3,7 @@ name = "n5-wasm"
 version = "0.1.0"
 license = "MIT/Apache-2.0"
 authors = ["Andrew Champion <andrew.champion@gmail.com>"]
+edition = "2018"
 description = "Rust-WASM bindings to the N5 tensor file system format"
 readme = "README.md"
 repository = "https://github.com/aschampion/n5-wasm"

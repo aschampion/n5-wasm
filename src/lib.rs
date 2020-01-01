@@ -1,11 +1,10 @@
-extern crate cfg_if;
-extern crate futures;
-extern crate js_sys;
-extern crate n5;
-extern crate serde_json;
-extern crate wasm_bindgen;
-extern crate wasm_bindgen_futures;
-extern crate web_sys;
+use futures;
+use js_sys;
+use n5;
+use serde_json;
+use wasm_bindgen;
+use wasm_bindgen_futures;
+use web_sys;
 
 mod utils;
 
