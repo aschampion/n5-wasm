@@ -39,7 +39,7 @@ pub trait N5PromiseReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise;
 
     fn list_attributes(&self, path_name: &str) -> Promise;
@@ -78,7 +78,7 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise {
 
         data_type_match! {
@@ -109,14 +109,14 @@ pub trait N5PromiseEtagReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise;
 
     fn read_block_with_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise;
 }
 
@@ -125,7 +125,7 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise {
         let to_return = self.block_etag(path_name, &data_attrs.0, grid_position.into())
             .map(JsValue::from);
@@ -137,7 +137,7 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise {
 
         data_type_match! {
@@ -176,8 +176,8 @@ pub trait N5AsyncReader {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<VecDataBlock<T>>, Error = Error>>
-            where VecDataBlock<T>: DataBlock<T>,
-                  T: ReflectedType + 'static;
+            where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+                T: ReflectedType;
 
     fn list(&self, path_name: &str) -> Box<dyn Future<Item = Vec<String>, Error = Error>>;
 
@@ -199,8 +199,8 @@ pub trait N5AsyncEtagReader {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
-            where VecDataBlock<T>: DataBlock<T>,
-                  T: ReflectedType + 'static;
+            where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+                T: ReflectedType;
 }
 
 
@@ -240,11 +240,11 @@ pub mod wrapped {
 
     #[wasm_bindgen]
     impl DatasetAttributes {
-        pub fn get_dimensions(&self) -> Vec<i64> {
+        pub fn get_dimensions(&self) -> Vec<u64> {
             self.0.get_dimensions().to_owned()
         }
 
-        pub fn get_block_size(&self) -> Vec<i32> {
+        pub fn get_block_size(&self) -> Vec<u32> {
             self.0.get_block_size().to_owned()
         }
 
@@ -299,11 +299,11 @@ macro_rules! data_block_monomorphizer {
 
         #[wasm_bindgen]
         impl $d_name {
-            pub fn get_size(&self) -> Vec<i32> {
+            pub fn get_size(&self) -> Vec<u32> {
                 self.0.get_size().to_owned()
             }
 
-            pub fn get_grid_position(&self) -> Vec<i64> {
+            pub fn get_grid_position(&self) -> Vec<u64> {
                 self.0.get_grid_position().to_owned()
             }
 
@@ -312,10 +312,10 @@ macro_rules! data_block_monomorphizer {
             }
 
             pub fn into_data(self) -> Vec<$d_type> {
-                self.0.into()
+                self.0.into_data()
             }
 
-            pub fn get_num_elements(&self) -> i32 {
+            pub fn get_num_elements(&self) -> u32 {
                 self.0.get_num_elements()
             }
 

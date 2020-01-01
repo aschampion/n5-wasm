@@ -58,7 +58,7 @@ impl N5HTTPFetch {
         map_future_error_rust(to_return)
     }
 
-    fn relative_block_path(&self, path_name: &str, grid_position: &[i64]) -> String {
+    fn relative_block_path(&self, path_name: &str, grid_position: &[u64]) -> String {
         let mut block_path = path_name.to_owned();
         for coord in grid_position {
             write!(block_path, "/{}", coord).unwrap();
@@ -119,7 +119,7 @@ impl N5HTTPFetch {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise {
         N5PromiseReader::read_block(self, path_name, data_attrs, grid_position)
     }
@@ -132,7 +132,7 @@ impl N5HTTPFetch {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>,
+        grid_position: Vec<u64>,
     ) -> Promise {
         N5PromiseEtagReader::block_etag(
             self, path_name, data_attrs, grid_position)
@@ -142,7 +142,7 @@ impl N5HTTPFetch {
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<i64>
+        grid_position: Vec<u64>
     ) -> Promise {
         N5PromiseEtagReader::read_block_with_etag(
             self, path_name, data_attrs, grid_position)
@@ -196,8 +196,9 @@ impl N5AsyncReader for N5HTTPFetch {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<VecDataBlock<T>>, Error = Error>>
-            where VecDataBlock<T>: DataBlock<T>,
-                  T: ReflectedType + 'static {
+        where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+            T: ReflectedType,
+    {
 
         Box::new(N5AsyncEtagReader::read_block_with_etag(
                 self, path_name, data_attrs, grid_position)
@@ -258,8 +259,9 @@ impl N5AsyncEtagReader for N5HTTPFetch {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
-            where VecDataBlock<T>: DataBlock<T>,
-                  T: ReflectedType + 'static {
+            where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+                T: ReflectedType,
+    {
 
         let da2 = data_attrs.clone();
 
