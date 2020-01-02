@@ -85,7 +85,7 @@ impl N5HTTPFetch {
 
         let to_return = N5AsyncReader::get_version(&reader).and_then(|version| {
 
-            if !n5::VERSION.is_compatible(&version) {
+            if !n5::is_version_compatible(&n5::VERSION, &version) {
                 return future::err(Error::new(ErrorKind::Other, "TODO: Incompatible version"))
             }
 
