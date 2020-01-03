@@ -16,6 +16,30 @@ use super::*;
 
 const ATTRIBUTES_FILE: &str = "attributes.json";
 
+enum GlobalProxy {
+    Window(web_sys::Window),
+    WorkerGlobalScope(web_sys::WorkerGlobalScope),
+}
+
+impl GlobalProxy {
+    fn fetch_with_request(&self, request: &Request) -> Promise {
+        match self {
+            GlobalProxy::Window(window) => window.fetch_with_request(request),
+            GlobalProxy::WorkerGlobalScope(scope) => scope.fetch_with_request(request),
+        }
+    }
+}
+
+fn self_() -> Result<GlobalProxy, JsValue> {
+    let global = js_sys::global();
+    if js_sys::eval("typeof WorkerGlobalScope !== 'undefined'")?.as_bool().unwrap() {
+        Ok(global.dyn_into::<web_sys::WorkerGlobalScope>().map(GlobalProxy::WorkerGlobalScope)?)
+    }
+    else {
+        Ok(global.dyn_into::<web_sys::Window>().map(GlobalProxy::Window)?)
+    }
+}
+
 
 #[wasm_bindgen]
 #[derive(Clone)]
@@ -33,7 +57,7 @@ impl N5HTTPFetch {
             &format!("{}/{}", &self.base_path, path_name),
             &request_options).unwrap();
 
-        let req_promise = web_sys::window().unwrap().fetch_with_request(&req);
+        let req_promise = self_().unwrap().fetch_with_request(&req);
 
         JsFuture::from(req_promise)
     }
@@ -236,7 +260,7 @@ impl N5AsyncEtagReader for N5HTTPFetch {
             &format!("{}/{}", &self.base_path, block_path),
             &request_options).unwrap();
 
-        let req_promise = web_sys::window().unwrap().fetch_with_request(&req);
+        let req_promise = self_().unwrap().fetch_with_request(&req);
 
         let f = JsFuture::from(req_promise)
             .map(|resp_value| {
