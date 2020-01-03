@@ -236,6 +236,7 @@ pub mod wrapped {
     }
 
     #[wasm_bindgen]
+    #[derive(serde::Deserialize, serde::Serialize)]
     pub struct DatasetAttributes(pub(crate) n5::DatasetAttributes);
 
     #[wasm_bindgen]
@@ -268,6 +269,14 @@ pub mod wrapped {
         /// Get the total number of elements possible in a block.
         pub fn get_block_num_elements(&self) -> usize {
             self.0.get_block_num_elements()
+        }
+
+        pub fn to_json(&self) -> JsValue {
+            JsValue::from_serde(self).unwrap()
+        }
+
+        pub fn from_json(js: &JsValue) -> Self {
+            JsValue::into_serde(js).unwrap()
         }
     }
 }
