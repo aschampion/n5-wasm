@@ -13,7 +13,6 @@ use web_sys::{
 
 use super::*;
 
-
 const ATTRIBUTES_FILE: &str = "attributes.json";
 
 enum GlobalProxy {
@@ -32,14 +31,19 @@ impl GlobalProxy {
 
 fn self_() -> Result<GlobalProxy, JsValue> {
     let global = js_sys::global();
-    if js_sys::eval("typeof WorkerGlobalScope !== 'undefined'")?.as_bool().unwrap() {
-        Ok(global.dyn_into::<web_sys::WorkerGlobalScope>().map(GlobalProxy::WorkerGlobalScope)?)
-    }
-    else {
-        Ok(global.dyn_into::<web_sys::Window>().map(GlobalProxy::Window)?)
+    if js_sys::eval("typeof WorkerGlobalScope !== 'undefined'")?
+        .as_bool()
+        .unwrap()
+    {
+        Ok(global
+            .dyn_into::<web_sys::WorkerGlobalScope>()
+            .map(GlobalProxy::WorkerGlobalScope)?)
+    } else {
+        Ok(global
+            .dyn_into::<web_sys::Window>()
+            .map(GlobalProxy::Window)?)
     }
 }
-
 
 #[wasm_bindgen]
 #[derive(Clone)]
@@ -55,7 +59,9 @@ impl N5HTTPFetch {
 
         let req = Request::new_with_str_and_init(
             &format!("{}/{}", &self.base_path, path_name),
-            &request_options).unwrap();
+            &request_options,
+        )
+        .unwrap();
 
         let req_promise = self_().unwrap().fetch_with_request(&req);
 
@@ -63,17 +69,20 @@ impl N5HTTPFetch {
     }
 
     fn fetch_json(&self, path_name: &str) -> impl Future<Item = JsValue, Error = JsValue> {
-        self.fetch(path_name).and_then(|resp_value| {
-            assert!(resp_value.is_instance_of::<Response>());
-            let resp: Response = resp_value.dyn_into()?;
+        self.fetch(path_name)
+            .and_then(|resp_value| {
+                assert!(resp_value.is_instance_of::<Response>());
+                let resp: Response = resp_value.dyn_into()?;
 
-            resp.json()
-        }).and_then(|json_value: Promise| {
-            JsFuture::from(json_value)
-        })
+                resp.json()
+            })
+            .and_then(|json_value: Promise| JsFuture::from(json_value))
     }
 
-    fn get_attributes(&self, path_name: &str) -> impl Future<Item = serde_json::Value, Error = Error> {
+    fn get_attributes(
+        &self,
+        path_name: &str,
+    ) -> impl Future<Item = serde_json::Value, Error = Error> {
         let path = self.get_dataset_attributes_path(path_name);
         let to_return = self
             .fetch_json(&path)
@@ -108,9 +117,8 @@ impl N5HTTPFetch {
         };
 
         let to_return = N5AsyncReader::get_version(&reader).and_then(|version| {
-
             if !n5::is_version_compatible(&n5::VERSION, &version) {
-                return future::err(Error::new(ErrorKind::Other, "TODO: Incompatible version"))
+                return future::err(Error::new(ErrorKind::Other, "TODO: Incompatible version"));
             }
 
             future::ok(JsValue::from(reader))
@@ -158,40 +166,39 @@ impl N5HTTPFetch {
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<u64>,
     ) -> Promise {
-        N5PromiseEtagReader::block_etag(
-            self, path_name, data_attrs, grid_position)
+        N5PromiseEtagReader::block_etag(self, path_name, data_attrs, grid_position)
     }
 
     pub fn read_block_with_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
-        grid_position: Vec<u64>
+        grid_position: Vec<u64>,
     ) -> Promise {
-        N5PromiseEtagReader::read_block_with_etag(
-            self, path_name, data_attrs, grid_position)
+        N5PromiseEtagReader::read_block_with_etag(self, path_name, data_attrs, grid_position)
     }
 }
 
 impl N5AsyncReader for N5HTTPFetch {
     fn get_version(&self) -> Box<dyn Future<Item = n5::Version, Error = Error>> {
-        let to_return = self.get_attributes("")
-            .and_then(|attr| {
-                let ver = attr.get(n5::VERSION_ATTRIBUTE_KEY)
-                    .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not an N5 root"))?;
-                Ok(n5::Version::from_str(ver.as_str().unwrap_or("")).unwrap())
-            });
+        let to_return = self.get_attributes("").and_then(|attr| {
+            let ver = attr
+                .get(n5::VERSION_ATTRIBUTE_KEY)
+                .ok_or_else(|| Error::new(ErrorKind::NotFound, "Not an N5 root"))?;
+            Ok(n5::Version::from_str(ver.as_str().unwrap_or("")).unwrap())
+        });
 
         Box::new(to_return)
     }
 
-    fn get_dataset_attributes(&self, path_name: &str) ->
-            Box<dyn Future<Item = n5::DatasetAttributes, Error = Error>> {
-
+    fn get_dataset_attributes(
+        &self,
+        path_name: &str,
+    ) -> Box<dyn Future<Item = n5::DatasetAttributes, Error = Error>> {
         let path = self.get_dataset_attributes_path(path_name);
         let to_return = self
             .fetch_json(&path)
-            .map(|json| { json.into_serde().unwrap() });
+            .map(|json| json.into_serde().unwrap());
 
         Box::new(map_future_error_rust(to_return))
     }
@@ -220,13 +227,14 @@ impl N5AsyncReader for N5HTTPFetch {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<VecDataBlock<T>>, Error = Error>>
-        where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
-            T: ReflectedType,
+    where
+        VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+        T: ReflectedType,
     {
-
-        Box::new(N5AsyncEtagReader::read_block_with_etag(
-                self, path_name, data_attrs, grid_position)
-            .map(|maybe_block| maybe_block.map(|(block, _etag)| block)))
+        Box::new(
+            N5AsyncEtagReader::read_block_with_etag(self, path_name, data_attrs, grid_position)
+                .map(|maybe_block| maybe_block.map(|(block, _etag)| block)),
+        )
     }
 
     fn list(&self, _path_name: &str) -> Box<dyn Future<Item = Vec<String>, Error = Error>> {
@@ -238,7 +246,6 @@ impl N5AsyncReader for N5HTTPFetch {
         &self,
         path_name: &str,
     ) -> Box<dyn Future<Item = serde_json::Value, Error = Error>> {
-
         Box::new(self.get_attributes(path_name))
     }
 }
@@ -258,21 +265,22 @@ impl N5AsyncEtagReader for N5HTTPFetch {
 
         let req = Request::new_with_str_and_init(
             &format!("{}/{}", &self.base_path, block_path),
-            &request_options).unwrap();
+            &request_options,
+        )
+        .unwrap();
 
         let req_promise = self_().unwrap().fetch_with_request(&req);
 
-        let f = JsFuture::from(req_promise)
-            .map(|resp_value| {
-                assert!(resp_value.is_instance_of::<Response>());
-                let resp: Response = resp_value.dyn_into().unwrap();
+        let f = JsFuture::from(req_promise).map(|resp_value| {
+            assert!(resp_value.is_instance_of::<Response>());
+            let resp: Response = resp_value.dyn_into().unwrap();
 
-                if resp.ok() {
-                    resp.headers().get("ETag").unwrap_or(None)
-                } else {
-                    None
-                }
-            });
+            if resp.ok() {
+                resp.headers().get("ETag").unwrap_or(None)
+            } else {
+                None
+            }
+        });
 
         Box::new(map_future_error_rust(f))
     }
@@ -283,10 +291,10 @@ impl N5AsyncEtagReader for N5HTTPFetch {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
-            where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
-                T: ReflectedType,
+    where
+        VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+        T: ReflectedType,
     {
-
         let da2 = data_attrs.clone();
 
         let block_path = self.relative_block_path(path_name, &grid_position);
@@ -297,20 +305,24 @@ impl N5AsyncEtagReader for N5HTTPFetch {
 
             if resp.ok() {
                 let etag: Option<String> = resp.headers().get("ETag").unwrap_or(None);
-                let to_return = JsFuture::from(resp.array_buffer().unwrap())
-                    .map(move |arrbuff_value| {
+                let to_return =
+                    JsFuture::from(resp.array_buffer().unwrap()).map(move |arrbuff_value| {
                         assert!(arrbuff_value.is_instance_of::<ArrayBuffer>());
                         let typebuff: js_sys::Uint8Array = js_sys::Uint8Array::new(&arrbuff_value);
                         let buff = typebuff.to_vec();
 
-                        Some((<n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
-                            &buff,
-                            &da2,
-                            grid_position).unwrap(),
-                            etag))
+                        Some((
+                            <n5::DefaultBlock as n5::DefaultBlockReader<T, &[u8]>>::read_block(
+                                &buff,
+                                &da2,
+                                grid_position,
+                            )
+                            .unwrap(),
+                            etag,
+                        ))
                     });
                 future::Either::A(to_return)
-            } else  {
+            } else {
                 future::Either::B(future::ok(None))
             }
         });

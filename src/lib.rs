@@ -15,17 +15,21 @@ use std::io::{
     ErrorKind,
 };
 
+use futures::{
+    future,
+    Future,
+};
 use js_sys::Promise;
-use futures::{future, Future};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use n5::prelude::*;
-use n5::{data_type_match, data_type_rstype_replace};
-
+use n5::{
+    data_type_match,
+    data_type_rstype_replace,
+};
 
 pub mod http_fetch;
-
 
 pub trait N5PromiseReader {
     /// Get the N5 specification version of the container.
@@ -47,31 +51,34 @@ pub trait N5PromiseReader {
     fn list_attributes(&self, path_name: &str) -> Promise;
 }
 
-impl<T> N5PromiseReader for T where T: N5AsyncReader {
+impl<T> N5PromiseReader for T
+where
+    T: N5AsyncReader,
+{
     fn get_version(&self) -> Promise {
-        let to_return = self.get_version()
+        let to_return = self
+            .get_version()
             .map(|v| JsValue::from(wrapped::Version(v)));
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
     fn get_dataset_attributes(&self, path_name: &str) -> Promise {
-        let to_return = self.get_dataset_attributes(path_name)
+        let to_return = self
+            .get_dataset_attributes(path_name)
             .map(|da| JsValue::from(wrapped::DatasetAttributes(da)));
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
     fn exists(&self, path_name: &str) -> Promise {
-        let to_return = self.exists(path_name)
-            .map(JsValue::from);
+        let to_return = self.exists(path_name).map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 
     fn dataset_exists(&self, path_name: &str) -> Promise {
-        let to_return = self.dataset_exists(path_name)
-            .map(JsValue::from);
+        let to_return = self.dataset_exists(path_name).map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
     }
@@ -82,7 +89,6 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<u64>,
     ) -> Promise {
-
         data_type_match! {
             data_attrs.0.get_data_type(),
             future_to_promise(map_future_error_wasm(
@@ -92,19 +98,15 @@ impl<T> N5PromiseReader for T where T: N5AsyncReader {
         }
     }
 
-    fn list_attributes(
-        &self,
-        path_name: &str,
-    ) -> Promise {
-
+    fn list_attributes(&self, path_name: &str) -> Promise {
         // TODO: Superfluous conversion from JSON to JsValue to serde to JsValue.
-        let to_return = self.list_attributes(path_name)
+        let to_return = self
+            .list_attributes(path_name)
             .map(|v| JsValue::from_serde(&v).unwrap());
 
         future_to_promise(map_future_error_wasm(to_return))
     }
 }
-
 
 pub trait N5PromiseEtagReader {
     fn block_etag(
@@ -122,14 +124,18 @@ pub trait N5PromiseEtagReader {
     ) -> Promise;
 }
 
-impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
+impl<T> N5PromiseEtagReader for T
+where
+    T: N5AsyncEtagReader,
+{
     fn block_etag(
         &self,
         path_name: &str,
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<u64>,
     ) -> Promise {
-        let to_return = self.block_etag(path_name, &data_attrs.0, grid_position.into())
+        let to_return = self
+            .block_etag(path_name, &data_attrs.0, grid_position.into())
             .map(JsValue::from);
 
         future_to_promise(map_future_error_wasm(to_return))
@@ -141,7 +147,6 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
         data_attrs: &wrapped::DatasetAttributes,
         grid_position: Vec<u64>,
     ) -> Promise {
-
         data_type_match! {
             data_attrs.0.get_data_type(),
             future_to_promise(map_future_error_wasm(
@@ -152,24 +157,29 @@ impl<T> N5PromiseEtagReader for T where T: N5AsyncEtagReader {
     }
 }
 
-
 /// This trait exists to preserve type information between calls (rather than
 /// erasing it with `Promise`) and for easier potential future compatibility
 /// with an N5 core async trait.
 pub trait N5AsyncReader {
     fn get_version(&self) -> Box<dyn Future<Item = n5::Version, Error = Error>>;
 
-    fn get_dataset_attributes(&self, path_name: &str) ->
-        Box<dyn Future<Item = n5::DatasetAttributes, Error = Error>>;
+    fn get_dataset_attributes(
+        &self,
+        path_name: &str,
+    ) -> Box<dyn Future<Item = n5::DatasetAttributes, Error = Error>>;
 
     fn exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>>;
 
     fn dataset_exists(&self, path_name: &str) -> Box<dyn Future<Item = bool, Error = Error>> {
-        Box::new(self.exists(path_name).join(
-            self.get_dataset_attributes(path_name)
-                .map(|_| true)
-                .or_else(|_| futures::future::ok(false))
-        ).map(|(exists, has_attr)| exists && has_attr))
+        Box::new(
+            self.exists(path_name)
+                .join(
+                    self.get_dataset_attributes(path_name)
+                        .map(|_| true)
+                        .or_else(|_| futures::future::ok(false)),
+                )
+                .map(|(exists, has_attr)| exists && has_attr),
+        )
     }
 
     fn read_block<T>(
@@ -178,14 +188,17 @@ pub trait N5AsyncReader {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<VecDataBlock<T>>, Error = Error>>
-            where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
-                T: ReflectedType;
+    where
+        VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+        T: ReflectedType;
 
     fn list(&self, path_name: &str) -> Box<dyn Future<Item = Vec<String>, Error = Error>>;
 
-    fn list_attributes(&self, path_name: &str) -> Box<dyn Future<Item = serde_json::Value, Error = Error>>;
+    fn list_attributes(
+        &self,
+        path_name: &str,
+    ) -> Box<dyn Future<Item = serde_json::Value, Error = Error>>;
 }
-
 
 pub trait N5AsyncEtagReader {
     fn block_etag(
@@ -201,18 +214,20 @@ pub trait N5AsyncEtagReader {
         data_attrs: &DatasetAttributes,
         grid_position: GridCoord,
     ) -> Box<dyn Future<Item = Option<(VecDataBlock<T>, Option<String>)>, Error = Error>>
-            where VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
-                T: ReflectedType;
+    where
+        VecDataBlock<T>: DataBlock<T> + n5::ReadableDataBlock,
+        T: ReflectedType;
 }
 
-
-fn map_future_error_rust<F: Future<Item = T, Error = JsValue>, T>(future: F)
-        -> impl Future<Item = T, Error = Error> {
+fn map_future_error_rust<F: Future<Item = T, Error = JsValue>, T>(
+    future: F,
+) -> impl Future<Item = T, Error = Error> {
     future.map_err(convert_jsvalue_error)
 }
 
-fn map_future_error_wasm<F: Future<Item = T, Error = Error>, T>(future: F)
-        -> impl Future<Item = T, Error = JsValue> {
+fn map_future_error_wasm<F: Future<Item = T, Error = Error>, T>(
+    future: F,
+) -> impl Future<Item = T, Error = JsValue> {
     future.map_err(|error| {
         let js_error = js_sys::Error::new(&format!("{:?}", error));
         JsValue::from(js_error)
@@ -222,7 +237,6 @@ fn map_future_error_wasm<F: Future<Item = T, Error = Error>, T>(future: F)
 fn convert_jsvalue_error(error: JsValue) -> Error {
     Error::new(std::io::ErrorKind::Other, format!("{:?}", error))
 }
-
 
 pub mod wrapped {
     use super::*;
@@ -334,14 +348,14 @@ macro_rules! data_block_monomorphizer {
                 self.1.to_owned()
             }
         }
-    }
+    };
 }
 
-data_block_monomorphizer!(VecDataBlockUINT8,  u8);
+data_block_monomorphizer!(VecDataBlockUINT8, u8);
 data_block_monomorphizer!(VecDataBlockUINT16, u16);
 data_block_monomorphizer!(VecDataBlockUINT32, u32);
 data_block_monomorphizer!(VecDataBlockUINT64, u64);
-data_block_monomorphizer!(VecDataBlockINT8,  i8);
+data_block_monomorphizer!(VecDataBlockINT8, i8);
 data_block_monomorphizer!(VecDataBlockINT16, i16);
 data_block_monomorphizer!(VecDataBlockINT32, i32);
 data_block_monomorphizer!(VecDataBlockINT64, i64);
