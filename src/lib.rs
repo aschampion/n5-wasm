@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use futures;
 use js_sys;
 use n5;
